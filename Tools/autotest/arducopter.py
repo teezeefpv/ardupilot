@@ -2800,6 +2800,14 @@ class AutoTestCopter(AutoTest):
 
     def disabled_tests(self):
         return {
+            "PayLoadPlaceMission": "Gripper is not enabled in IAV builds",
+            "SetModesViaModeSwitch": "Sport, Acro, and Brake are not enabled in IAV builds",
+            "HorizontalFence": "Fence is not enabled in IAV builds",
+            "MaxAltFence": "Fence is not enabled in IAV builds",
+            "SimpleMode": "Simple mode is not enabled in IAV builds",
+            "SuperSimpleCircle": "SuperSimple mode is not enabled in IAV builds",
+            "Gripper": "Gripper is not enabled in IAV builds",
+            "TestGripperMission": "Gripper is not enabled in IAV builds",
             "Parachute": "See https://github.com/ArduPilot/ardupilot/issues/4702",
         }
 
