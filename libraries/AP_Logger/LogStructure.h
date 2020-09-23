@@ -580,7 +580,14 @@ struct PACKED log_Current_Cells {
     uint64_t time_us;
     uint8_t  instance;
     float    voltage;
-    uint16_t cell_voltages[12];
+    uint16_t cell_voltages[12]; // the format does not support more than 12 cells, the remaining cells are reported in the log_Current_Cells2 structure
+};
+
+struct PACKED log_Current_Cells2 {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t  instance;
+    uint16_t cell_voltages[2];
 };
 
 struct PACKED log_MAG {
@@ -1184,6 +1191,13 @@ struct PACKED log_PSC {
 // @Field: V10: tenth cell voltage
 // @Field: V11: eleventh cell voltage
 // @Field: V12: twelfth cell voltage
+
+// @LoggerMessage: BCL2
+// @Description: Battery cell voltage information
+// @Field: TimeUS: Time since system startup
+// @Field: I: battery instance number
+// @Field: V13: thirteenth cell voltage
+// @Field: V14: fourteenth cell voltage
 
 // @LoggerMessage: BCN
 // @Description: Beacon informtaion
@@ -1930,6 +1944,8 @@ struct PACKED log_PSC {
       "BAT", "QBfffffcf", "TimeUS,Instance,Volt,VoltR,Curr,CurrTot,EnrgTot,Temp,Res", "s#vvAiJOw", "F-000!/?0" },  \
     { LOG_CURRENT_CELLS_MSG, sizeof(log_Current_Cells), \
       "BCL", "QBfHHHHHHHHHHHH", "TimeUS,Instance,Volt,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12", "s#vvvvvvvvvvvvv", "F-0CCCCCCCCCCCC" }, \
+    { LOG_CURRENT_CELLS2_MSG, sizeof(log_Current_Cells2), \
+      "BCL2", "QBfHH", "TimeUS,Instance,V13,V14", "s#vv", "F-CC" }, \
 	{ LOG_ATTITUDE_MSG, sizeof(log_Attitude),\
       "ATT", "QccccCCCC", "TimeUS,DesRoll,Roll,DesPitch,Pitch,DesYaw,Yaw,ErrRP,ErrYaw", "sddddhhdh", "FBBBBBBBB" }, \
     { LOG_MAG_MSG, sizeof(log_MAG), \
@@ -2101,6 +2117,7 @@ enum LogMessages : uint8_t {
     LOG_ATTITUDE_MSG,
     LOG_CURRENT_MSG,
     LOG_CURRENT_CELLS_MSG,
+    LOG_CURRENT_CELLS2_MSG,
     LOG_MAG_MSG,
     LOG_MODE_MSG,
     LOG_GPS_RAW_MSG,

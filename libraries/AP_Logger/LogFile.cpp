@@ -640,14 +640,24 @@ void AP_Logger::Write_Current_instance(const uint64_t time_us,
             instance            : battery_instance,
             voltage             : battery.voltage(battery_instance)
         };
-        for (uint8_t i = 0; i < ARRAY_SIZE(cells.cells); i++) {
-            cell_pkt.cell_voltages[i] = cells.cells[i] + 1;
+        for (uint8_t i = 0; i < ARRAY_SIZE(cell_pkt.cell_voltages); i++) {
+            cell_pkt.cell_voltages[i] = cells.cells[i] + 1; // add 1mv
         }
         WriteBlock(&cell_pkt, sizeof(cell_pkt));
 
+        struct log_Current_Cells2 cell2_pkt{
+            LOG_PACKET_HEADER_INIT(LOG_CURRENT_CELLS2_MSG),
+            time_us             : time_us,
+            instance            : battery_instance,
+        };
+        for (uint8_t i = 0; i < ARRAY_SIZE(cell2_pkt.cell_voltages); i++) {
+            cell2_pkt.cell_voltages[i] = cells.cells[ARRAY_SIZE(cell_pkt.cell_voltages)+i] + 1; // add 1mv
+        }
+        WriteBlock(&cell2_pkt, sizeof(cell2_pkt));
+
         // check battery structure can hold all cells
-        static_assert(ARRAY_SIZE(cells.cells) == (sizeof(cell_pkt.cell_voltages) / sizeof(cell_pkt.cell_voltages[0])),
-                      "Battery cell number doesn't match in library and log structure");
+        static_assert(ARRAY_SIZE(cells.cells) == ARRAY_SIZE(cell_pkt.cell_voltages) + ARRAY_SIZE(cell2_pkt.cell_voltages),
+                      "Battery cell number doesn't match in library and log structures");
     }
 }
 
