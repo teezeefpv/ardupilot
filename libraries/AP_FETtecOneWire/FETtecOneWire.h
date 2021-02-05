@@ -13,22 +13,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// includes
-#include "config.h"
-#include "serial.h"
-#ifdef STM32F3
-#include "driversF3/GEN_SERIAL_Driver_F3.h"
-#endif
-#ifdef STM32L4
-#include "driversL4/GEN_SERIAL_Driver_L4.h"
-#endif
-#ifdef STM32G4
-#include "driversG4/GEN_SERIAL_Driver_G4.h"
-#endif
-#ifdef STM32F7
-#include "driversF7/GEN_SERIAL_Driver_F7.h"
-#endif
-
 //UART uasage
 
 /*
