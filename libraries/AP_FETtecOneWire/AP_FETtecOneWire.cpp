@@ -19,6 +19,7 @@
 #include <AP_Math/AP_Math.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include <GCS_MAVLink/GCS.h>
+#include <AP_Logger/AP_Logger.h>
 
 #include "AP_FETtecOneWire.h"
 #if HAL_AP_FETTECONEWIRE_ENABLED
@@ -35,9 +36,11 @@ const AP_Param::GroupInfo AP_FETtecOneWire::var_info[] = {
     AP_GROUPEND
 };
 
-// constructor
+AP_FETtecOneWire *AP_FETtecOneWire::_singleton;
+
 AP_FETtecOneWire::AP_FETtecOneWire()
 {
+    _singleton = this;
     FETtecOneWire_ResponseLength[OW_OK] = 1;
     FETtecOneWire_ResponseLength[OW_BL_PAGE_CORRECT] = 1;   // BL only
     FETtecOneWire_ResponseLength[OW_NOT_OK] = 1;
@@ -196,8 +199,25 @@ void AP_FETtecOneWire::update()
             printf(", E-rpm: %d", completeTelemetry[i][3]);
             printf(", consumption: %d", completeTelemetry[i][4]);
             printf("\n");
+            AP_Logger *logger = AP_Logger::get_singleton();
+
+            // log at 10Hz
+            const uint32_t now = AP_HAL::millis();
+            if (logger && logger->logging_enabled() && now - last_log_ms > 100) {
+                logger->Write_ESC(,
+                        AP_HAL::micros64(),
+                        completeTelemetry[i][3] * 100U,
+                        completeTelemetry[i][1],
+                        completeTelemetry[i][2],
+                        completeTelemetry[i][0] * 100U,
+                        completeTelemetry[i][4],
+                        0,
+                        0);
+                last_log_ms = now;
+            }
         }
     }
+
 }
 
 /*

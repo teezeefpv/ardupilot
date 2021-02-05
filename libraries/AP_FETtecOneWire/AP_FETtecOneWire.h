@@ -41,14 +41,18 @@ public:
 
     void update();
     void send_esc_telemetry_mavlink(uint8_t mav_chan);
-
+    static AP_FETtecOneWire *get_singleton() {
+        return _singleton;
+    }
 private:
     void init();
+    static AP_FETtecOneWire *_singleton;
     bool initialised;
     AP_HAL::UARTDriver *_uart;
     AP_Int32 motor_mask;
 
     uint32_t last_send_us;
+    uint32_t last_log_ms;
     static constexpr uint32_t DELAY_TIME_US = 700;
     static constexpr uint8_t DETECT_ESC_COUNT = 4;  // TODO needed ?
     static constexpr uint8_t MOTOR_COUNT_MAX = NUM_SERVO_CHANNELS;
