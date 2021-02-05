@@ -204,7 +204,7 @@ void AP_FETtecOneWire::update()
             // log at 10Hz
             const uint32_t now = AP_HAL::millis();
             if (logger && logger->logging_enabled() && now - last_log_ms > 100) {
-                logger->Write_ESC(,
+                logger->Write_ESC(i,
                         AP_HAL::micros64(),
                         completeTelemetry[i][3] * 100U,
                         completeTelemetry[i][1],
