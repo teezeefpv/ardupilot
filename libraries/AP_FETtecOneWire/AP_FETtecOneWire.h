@@ -18,6 +18,7 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL.h>
+#include <SRV_Channel/SRV_Channel.h>
 
 #ifndef HAL_AP_FETTECONEWIRE_ENABLED
 #define HAL_AP_FETTECONEWIRE_ENABLED !HAL_MINIMIZE_FEATURES && !defined(HAL_BUILD_AP_PERIPH) && BOARD_FLASH_SIZE > 1024
@@ -26,7 +27,7 @@
 #if HAL_AP_FETTECONEWIRE_ENABLED
 
 #include <AP_Param/AP_Param.h>
-#include <SRV_Channel/SRV_Channel.h>
+
 
 
 class AP_FETtecOneWire {
@@ -55,7 +56,7 @@ private:
     uint32_t last_log_ms;
     static constexpr uint32_t DELAY_TIME_US = 700;
     static constexpr uint8_t DETECT_ESC_COUNT = 4;  // TODO needed ?
-    static constexpr uint8_t MOTOR_COUNT_MAX = NUM_SERVO_CHANNELS;
+    static constexpr uint8_t MOTOR_COUNT_MAX = 8;
     int8_t TelemetryAvailable = -1;
     uint16_t completeTelemetry[MOTOR_COUNT_MAX][6] = {0};
     uint16_t motorpwm[MOTOR_COUNT_MAX] = {1000};
@@ -268,8 +269,6 @@ private:
       OW_TLM_DEBUG2,
       OW_TLM_DEBUG3
     };
-    static uint8_t FETtecOneWire_ResponseLength[54];
-    static uint8_t FETtecOneWire_RequestLength[54];
 };
 #endif // HAL_AP_FETTECONEWIRE_ENABLED
 

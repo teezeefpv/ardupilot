@@ -38,6 +38,9 @@ const AP_Param::GroupInfo AP_FETtecOneWire::var_info[] = {
 
 AP_FETtecOneWire *AP_FETtecOneWire::_singleton;
 
+static uint8_t FETtecOneWire_ResponseLength[54];
+static uint8_t FETtecOneWire_RequestLength[54];
+
 AP_FETtecOneWire::AP_FETtecOneWire()
 {
     _singleton = this;
