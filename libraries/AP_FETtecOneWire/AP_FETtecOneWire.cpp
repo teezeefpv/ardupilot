@@ -14,10 +14,26 @@
  */
 
 /* Protocol implementation was provided by FETtec */
+
 #include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_Math/AP_Math.h>
+#include <GCS_MAVLink/GCS_MAVLink.h>
+#include <GCS_MAVLink/GCS.h>
+
 #include "AP_FETtecOneWire.h"
+#if HAL_AP_FETTECONEWIRE_ENABLED
 #include <stdio.h>
+
+const AP_Param::GroupInfo AP_FETtecOneWire::var_info[] = {
+    // @Param: MASK
+    // @DisplayName: Channel Bitmask
+    // @Description: Enable of volz servo protocol to specific channels
+    // @Bitmask: 0:Channel1,1:Channel2,2:Channel3,3:Channel4,4:Channel5,5:Channel6,6:Channel7,7:Channel8,8:Channel9,9:Channel10,10:Channel11,11:Channel12,12:Channel13,13:Channel14,14:Channel15,15:Channel16
+    // @User: Standard
+    AP_GROUPINFO("MASK",  1, AP_FETtecOneWire, motor_mask, 0),
+
+    AP_GROUPEND
+};
 
 // constructor
 AP_FETtecOneWire::AP_FETtecOneWire()
@@ -147,18 +163,32 @@ void AP_FETtecOneWire::update()
         return;
     }
 
-    uint16_t requestedTelemetry[MOTOR_COUNT] = {0};
-    int8_t TelemetryAvailable = FETtecOneWire_ESCsSetValues(motorpwm, requestedTelemetry, MOTOR_COUNT, TLM_request);
+    const uint16_t mask = uint16_t(motor_mask.get());
+
+    // tell SRV_Channels about ESC capabilities
+    SRV_Channels::set_digital_mask(mask);
+    for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
+        SRV_Channel* c = SRV_Channels::srv_channel(i);
+        if (c == nullptr) {
+            continue;
+        }
+        motorpwm[i] = c->get_output_pwm();
+    }
+
+    uint16_t requestedTelemetry[MOTOR_COUNT_MAX] = {0};
+    TelemetryAvailable = FETtecOneWire_ESCsSetValues(motorpwm, requestedTelemetry, MOTOR_COUNT_MAX, TLM_request);
     if (TelemetryAvailable != -1) {
-        for (uint8_t i = 0; i < MOTOR_COUNT; i++) {
+        for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
             completeTelemetry[i][TelemetryAvailable] = requestedTelemetry[i];
+            completeTelemetry[i][5]++;
         }
     }
     if (++TLM_request == 5) {
         TLM_request = 0;
     }
+
     if (TelemetryAvailable != -1) {
-        for (uint8_t i = 0; i < MOTOR_COUNT; i++) {
+        for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
             printf(" esc: %d", i + 1);
             printf(" Temperature: %d", completeTelemetry[i][0]);
             printf(", Voltage: %d", completeTelemetry[i][1]);
@@ -166,6 +196,41 @@ void AP_FETtecOneWire::update()
             printf(", E-rpm: %d", completeTelemetry[i][3]);
             printf(", consumption: %d", completeTelemetry[i][4]);
             printf("\n");
+        }
+    }
+}
+
+/*
+  send ESC telemetry messages over MAVLink
+ */
+void AP_FETtecOneWire::send_esc_telemetry_mavlink(uint8_t mav_chan)
+{
+    if (TelemetryAvailable == -1) {
+        return;
+    }
+    uint8_t temperature[4] {};
+    uint16_t voltage[4] {};
+    uint16_t current[4] {};
+    uint16_t totalcurrent[4] {};
+    uint16_t rpm[4] {};
+    uint16_t count[4] {};
+    for (uint8_t i=0; i<MOTOR_COUNT_MAX; i++) {
+        uint8_t idx = i % 4;
+        temperature[idx] = completeTelemetry[i][0];
+        voltage[idx] = completeTelemetry[i][1];
+        current[idx] = completeTelemetry[i][2];
+        rpm[idx] = completeTelemetry[i][3];
+        totalcurrent[idx] = completeTelemetry[i][4];
+        count[idx] = completeTelemetry[i][5];
+        if (i % 4 == 3 || i == MOTOR_COUNT_MAX - 1) {
+            if (!HAVE_PAYLOAD_SPACE((mavlink_channel_t)mav_chan, ESC_TELEMETRY_1_TO_4)) {
+                return;
+            }
+            if (i < 4) {
+                mavlink_msg_esc_telemetry_1_to_4_send((mavlink_channel_t)mav_chan, temperature, voltage, current, totalcurrent, rpm, count);
+            } else {
+                mavlink_msg_esc_telemetry_5_to_8_send((mavlink_channel_t)mav_chan, temperature, voltage, current, totalcurrent, rpm, count);
+            }
         }
     }
 }
@@ -759,3 +824,4 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
     }
     return return_TLM_request; // returns the readed tlm as it is 1 loop delayed
 }
+#endif  // HAL_AP_FETTECONEWIRE_ENABLED
