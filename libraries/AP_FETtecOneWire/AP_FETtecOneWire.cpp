@@ -269,11 +269,11 @@ void AP_FETtecOneWire::FETtecOneWire_Init()
         FETtecOneWire_FoundESCs = 0;
         FETtecOneWire_ScanActive = 0;
         FETtecOneWire_SetupActive = 0;
-        FETtecOneWire_minID = 25;
+        FETtecOneWire_minID = MAX_SUPPORTED_CH;
         FETtecOneWire_maxID = 0;
         FETtecOneWire_IDcount = 0;
         FETtecOneWire_FastThrottleByteCount = 0;
-        for (uint8_t i = 0; i < 25; i++) {
+        for (uint8_t i = 0; i < MAX_SUPPORTED_CH; i++) {
             FETtecOneWire_activeESC_IDs[i] = 0;
         }
     }
@@ -326,7 +326,7 @@ void AP_FETtecOneWire::FETtecOneWire_Transmit(uint8_t ESC_id, uint8_t* Bytes, ui
 {
     /*
     a frame lookes like:
-    byte 1 = fremae header (master is always 0x01)
+    byte 1 = frame header (master is always 0x01)
     byte 2 = target ID (5bit)
     byte 3 & 4 = frame type (always 0x00, 0x00 used for bootloader. here just for compatibility)
     byte 5 = frame length over all bytes
@@ -354,7 +354,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_Receive(uint8_t* Bytes, uint8_t Length, 
 {
     /*
     a frame lookes like:
-    byte 1 = fremae header (0x02 = bootloader, 0x03 = ESC firmware)
+    byte 1 = frame header (0x02 = bootloader, 0x03 = ESC firmware)
     byte 2 = sender ID (5bit)
     byte 3 & 4 = frame type (always 0x00, 0x00 used for bootloader. here just for compatibility)
     byte 5 = frame length over all bytes
@@ -416,7 +416,7 @@ void AP_FETtecOneWire::FETtecOneWire_Beep(uint8_t beepFreqency)
         uint8_t spacer[2] = {0, 0};
         for (uint8_t i = FETtecOneWire_minID; i < FETtecOneWire_maxID + 1; i++) {
             FETtecOneWire_Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
-            // add two zeros to make sure all ESC's can catch their command as we dont wait for a response here
+            // add two zeros to make sure all ESC's can catch their command as we don't wait for a response here
             _uart->write(spacer, 2);
             FETtecOneWire_IgnoreOwnBytes += 2;
         }
@@ -476,7 +476,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_PullCommand(uint8_t ESC_id, uint8_t* com
 }
 
 /*
-    scans for ESC's in bus. should be called intill FETtecOneWire_ScanActive >= 25
+    scans for ESC's in bus. should be called untill FETtecOneWire_ScanActive >= MAX_SUPPORTED_CH
     returns the currend scanned ID
 */
 uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
@@ -566,7 +566,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
 }
 
 /*
-    starts all ESC's in bus and prepares them for receiving teh fast throttle command should be called untill FETtecOneWire_SetupActive >= 25
+    starts all ESC's in bus and prepares them for receiving the fast throttle command should be called untill FETtecOneWire_SetupActive >= MAX_SUPPORTED_CH
     returns the current used ID
 */
 uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
@@ -587,23 +587,23 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
         wakeFromBL = 1;
         return FETtecOneWire_SetupActive + 1;
     }
-    while (FETtecOneWire_activeESC_IDs[FETtecOneWire_SetupActive] == 0 && FETtecOneWire_SetupActive < 25) {
+    while (FETtecOneWire_activeESC_IDs[FETtecOneWire_SetupActive] == 0 && FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
         FETtecOneWire_SetupActive++;
     }
 
-    if (FETtecOneWire_SetupActive == 25 && wakeFromBL == 0) {
+    if (FETtecOneWire_SetupActive == MAX_SUPPORTED_CH && wakeFromBL == 0) {
         return FETtecOneWire_SetupActive;
-    } else if (FETtecOneWire_SetupActive == 25 && wakeFromBL) {
+    } else if (FETtecOneWire_SetupActive == MAX_SUPPORTED_CH && wakeFromBL) {
         wakeFromBL = 0;
         activeID = 1;
         FETtecOneWire_SetupActive = 1;
         State = 0;
         TimeOut = 0;
 
-        FETtecOneWire_minID = 25;
+        FETtecOneWire_minID = MAX_SUPPORTED_CH;
         FETtecOneWire_maxID = 0;
         FETtecOneWire_IDcount = 0;
-        for (uint8_t i = 0; i < 25; i++) {
+        for (uint8_t i = 0; i < MAX_SUPPORTED_CH; i++) {
             if (FETtecOneWire_activeESC_IDs[i] != 0) {
                 FETtecOneWire_IDcount++;
                 if (i < FETtecOneWire_minID) {
@@ -628,7 +628,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
         }
         setFastCommand[1] = FETtecOneWire_FastThrottleByteCount; // just for older ESC FW versions since 1.0 001 this byte is ignored as the ESC calculates it itself
         setFastCommand[2] = FETtecOneWire_minID;                 // min ESC id
-        setFastCommand[3] = FETtecOneWire_IDcount;                 // count of ESC's that will get signals
+        setFastCommand[3] = FETtecOneWire_IDcount;               // count of ESC's that will get signals
     }
 
     if (delayLoops > 0) {
@@ -743,7 +743,7 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
     int8_t return_TLM_request = -2;
 
     // init should not be done too fast. as at last the bootloader has some timing requirements with messages. so loop delays must fit more or less
-    if (FETtecOneWire_ScanActive < 25 || FETtecOneWire_SetupActive < 25) {
+    if (FETtecOneWire_ScanActive < MAX_SUPPORTED_CH || FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
         const uint32_t now = AP_HAL::micros();
         if (now - last_send_us < DELAY_TIME_US) {
             return 0;
@@ -751,10 +751,10 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
             last_send_us = now;
         }
 
-        if (FETtecOneWire_ScanActive < 25) {
+        if (FETtecOneWire_ScanActive < MAX_SUPPORTED_CH) {
             // scan for all ESC's in onewire bus
             FETtecOneWire_ScanActive = FETtecOneWire_ScanESCs();
-        } else if (FETtecOneWire_SetupActive < 25) {
+        } else if (FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
             if (FETtecOneWire_FoundESCs == 0) {
                 FETtecOneWire_ScanActive = 0;
             } else {

@@ -57,6 +57,7 @@ private:
     static constexpr uint32_t DELAY_TIME_US = 700;
     static constexpr uint8_t DETECT_ESC_COUNT = 4;  // TODO needed ?
     static constexpr uint8_t MOTOR_COUNT_MAX = 8;
+    static constexpr uint8_t MAX_SUPPORTED_CH = MIN(NUM_SERVO_CHANNELS, 25);
     int8_t TelemetryAvailable = -1;
     uint16_t completeTelemetry[MOTOR_COUNT_MAX][6] = {0};
     uint16_t motorpwm[MOTOR_COUNT_MAX] = {1000};
@@ -134,13 +135,13 @@ private:
     uint8_t FETtecOneWire_PullCommand(uint8_t ESC_id, uint8_t *command, uint8_t *response, uint8_t returnFullFrame);
 
 /*
-    scans for ESC's in bus. should be called intill FETtecOneWire_ScanActive >= 25
+    scans for ESC's in bus. should be called untill FETtecOneWire_ScanActive >= MAX_SUPPORTED_CH
     returns the current scanned ID
 */
     uint8_t FETtecOneWire_ScanESCs(void);
 
 /*
-    starts all ESC's in bus and prepares them for receiving teh fast throttle command should be called untill FETtecOneWire_SetupActive >= 25
+    starts all ESC's in bus and prepares them for receiving teh fast throttle command should be called untill FETtecOneWire_SetupActive >= MAX_SUPPORTED_CH
     returns the current used ID
 */
     uint8_t FETtecOneWire_InitESCs(void);
@@ -177,13 +178,13 @@ private:
       uint8_t serialNumber[12];
     } FETtecOneWireESC_t;
 
-    uint8_t FETtecOneWire_activeESC_IDs[25] = {0};
-    FETtecOneWireESC_t FETtecOneWire_foundESCs[25];
+    uint8_t FETtecOneWire_activeESC_IDs[MAX_SUPPORTED_CH] = {0};
+    FETtecOneWireESC_t FETtecOneWire_foundESCs[MAX_SUPPORTED_CH];
     uint8_t FETtecOneWire_FoundESCs = 0;
     uint8_t FETtecOneWire_ScanActive = 0;
     uint8_t FETtecOneWire_SetupActive = 0;
     uint8_t FETtecOneWire_IgnoreOwnBytes = 0;
-    int8_t FETtecOneWire_minID = 25;
+    int8_t FETtecOneWire_minID = MAX_SUPPORTED_CH;
     int8_t FETtecOneWire_maxID = 0;
     uint8_t FETtecOneWire_IDcount = 0;
     uint8_t FETtecOneWire_FastThrottleByteCount = 0;
