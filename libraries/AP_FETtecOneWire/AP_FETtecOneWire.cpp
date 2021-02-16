@@ -28,7 +28,7 @@
 const AP_Param::GroupInfo AP_FETtecOneWire::var_info[] = {
     // @Param: MASK
     // @DisplayName: Channel Bitmask
-    // @Description: Enable of volz servo protocol to specific channels
+    // @Description: Enable of FETtec OneWire ESC protocol to specific channels
     // @Bitmask: 0:Channel1,1:Channel2,2:Channel3,3:Channel4,4:Channel5,5:Channel6,6:Channel7,7:Channel8,8:Channel9,9:Channel10,10:Channel11,11:Channel12,12:Channel13,13:Channel14,14:Channel15,15:Channel16
     // @User: Standard
     AP_GROUPINFO("MASK",  1, AP_FETtecOneWire, motor_mask, 0),
@@ -97,7 +97,7 @@ AP_FETtecOneWire::AP_FETtecOneWire()
     FETtecOneWire_RequestLength[OW_OK] = 1;
     FETtecOneWire_RequestLength[OW_BL_PAGE_CORRECT] = 1; // BL only
     FETtecOneWire_RequestLength[OW_NOT_OK] = 1;
-    FETtecOneWire_RequestLength[OW_BL_START_FW] = 1;        // BL only
+    FETtecOneWire_RequestLength[OW_BL_START_FW] = 1;       // BL only
     FETtecOneWire_RequestLength[OW_BL_PAGES_TO_FLASH] = 1; // BL only
     FETtecOneWire_RequestLength[OW_REQ_TYPE] = 1;
     FETtecOneWire_RequestLength[OW_REQ_SN] = 1;
@@ -153,7 +153,7 @@ void AP_FETtecOneWire::init()
     if (_uart) {
         _uart->begin(2000000);
     }
-    FETtecOneWire_Init();
+    Init();
 }
 
 void AP_FETtecOneWire::update()
@@ -182,7 +182,7 @@ void AP_FETtecOneWire::update()
     }
 
     uint16_t requestedTelemetry[MOTOR_COUNT_MAX] = {0};
-    TelemetryAvailable = FETtecOneWire_ESCsSetValues(motorpwm, requestedTelemetry, MOTOR_COUNT_MAX, TLM_request);
+    TelemetryAvailable = ESCsSetValues(motorpwm, requestedTelemetry, MOTOR_COUNT_MAX, TLM_request);
     if (TelemetryAvailable != -1) {
         for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
             completeTelemetry[i][TelemetryAvailable] = requestedTelemetry[i];
@@ -263,24 +263,24 @@ void AP_FETtecOneWire::send_esc_telemetry_mavlink(uint8_t mav_chan)
 /*
     initialize FETtecOneWire protocol
 */
-void AP_FETtecOneWire::FETtecOneWire_Init()
+void AP_FETtecOneWire::Init()
 {
-    if (FETtecOneWire_firstInitDone == 0) {
-        FETtecOneWire_FoundESCs = 0;
-        FETtecOneWire_ScanActive = 0;
-        FETtecOneWire_SetupActive = 0;
-        FETtecOneWire_minID = MAX_SUPPORTED_CH;
-        FETtecOneWire_maxID = 0;
-        FETtecOneWire_IDcount = 0;
-        FETtecOneWire_FastThrottleByteCount = 0;
+    if (_firstInitDone == 0) {
+        _FoundESCs = 0;
+        _ScanActive = 0;
+        _SetupActive = 0;
+        _minID = MAX_SUPPORTED_CH;
+        _maxID = 0;
+        _IDcount = 0;
+        _FastThrottleByteCount = 0;
         for (uint8_t i = 0; i < MAX_SUPPORTED_CH; i++) {
-            FETtecOneWire_activeESC_IDs[i] = 0;
+            _activeESC_IDs[i] = 0;
         }
     }
-    FETtecOneWire_IgnoreOwnBytes = 0;
-    FETtecOneWire_PullSuccess = 0;
-    FETtecOneWire_PullBusy = 0;
-    FETtecOneWire_firstInitDone = 1;
+    _IgnoreOwnBytes = 0;
+    _PullSuccess = 0;
+    _PullBusy = 0;
+    _firstInitDone = 1;
 }
 
 /*
@@ -289,7 +289,7 @@ void AP_FETtecOneWire::FETtecOneWire_Init()
     crc_seed = CRC where it gets added too
     returns 8 bit CRC
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_UpdateCrc8(uint8_t crc, uint8_t crc_seed)
+uint8_t AP_FETtecOneWire::UpdateCrc8(uint8_t crc, uint8_t crc_seed)
 {
     uint8_t crc_u, i;
     crc_u = crc;
@@ -306,11 +306,11 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_UpdateCrc8(uint8_t crc, uint8_t crc_seed
     BufLen = count of bytes that should be used for CRC calculation
     returns 8 bit CRC
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_GetCrc8(uint8_t* Buf, uint16_t BufLen)
+uint8_t AP_FETtecOneWire::GetCrc8(uint8_t* Buf, uint16_t BufLen)
 {
     uint8_t crc = 0;
     for (uint16_t i = 0; i < BufLen; i++) {
-        crc = FETtecOneWire_UpdateCrc8(Buf[i], crc);
+        crc = UpdateCrc8(Buf[i], crc);
     }
     return (crc);
 }
@@ -322,10 +322,10 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_GetCrc8(uint8_t* Buf, uint16_t BufLen)
     Length = length of the Bytes array
     returns nothing
 */
-void AP_FETtecOneWire::FETtecOneWire_Transmit(uint8_t ESC_id, uint8_t* Bytes, uint8_t Length)
+void AP_FETtecOneWire::Transmit(uint8_t ESC_id, uint8_t* Bytes, uint8_t Length)
 {
     /*
-    a frame lookes like:
+    a frame looks like:
     byte 1 = frame header (master is always 0x01)
     byte 2 = target ID (5bit)
     byte 3 & 4 = frame type (always 0x00, 0x00 used for bootloader. here just for compatibility)
@@ -338,9 +338,9 @@ void AP_FETtecOneWire::FETtecOneWire_Transmit(uint8_t ESC_id, uint8_t* Bytes, ui
     for (uint8_t i = 0; i < Length; i++) {
         transmitArr[i + 5] = Bytes[i];
     }
-    transmitArr[Length + 5] = FETtecOneWire_GetCrc8(transmitArr, Length + 5); // crc
+    transmitArr[Length + 5] = GetCrc8(transmitArr, Length + 5); // crc
     _uart->write(transmitArr, Length + 6);
-    FETtecOneWire_IgnoreOwnBytes += Length + 6;
+    _IgnoreOwnBytes += Length + 6;
 }
 
 /*
@@ -350,10 +350,10 @@ void AP_FETtecOneWire::FETtecOneWire_Transmit(uint8_t ESC_id, uint8_t* Bytes, ui
     returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
     returns 1 if the expected answer frame was there, 0 if dont
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_Receive(uint8_t* Bytes, uint8_t Length, uint8_t returnFullFrame)
+uint8_t AP_FETtecOneWire::Receive(uint8_t* Bytes, uint8_t Length, uint8_t returnFullFrame)
 {
     /*
-    a frame lookes like:
+    a frame looks like:
     byte 1 = frame header (0x02 = bootloader, 0x03 = ESC firmware)
     byte 2 = sender ID (5bit)
     byte 3 & 4 = frame type (always 0x00, 0x00 used for bootloader. here just for compatibility)
@@ -363,8 +363,8 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_Receive(uint8_t* Bytes, uint8_t Length, 
     */
 
     //ignore own bytes
-    while (FETtecOneWire_IgnoreOwnBytes > 0 && _uart->available()) {
-        FETtecOneWire_IgnoreOwnBytes--;
+    while (_IgnoreOwnBytes > 0 && _uart->available()) {
+        _IgnoreOwnBytes--;
         _uart->read();
     }
     // look for the real answer
@@ -383,7 +383,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_Receive(uint8_t* Bytes, uint8_t Length, 
                 ReceiveBuf[i] = _uart->read();
             }
             // check CRC
-            if (FETtecOneWire_GetCrc8(ReceiveBuf, Length + 5) == ReceiveBuf[Length + 5]) {
+            if (GetCrc8(ReceiveBuf, Length + 5) == ReceiveBuf[Length + 5]) {
                 if (!returnFullFrame) {
                     for (uint8_t i = 0; i < Length; i++) {
                         Bytes[i] = ReceiveBuf[5 + i];
@@ -406,37 +406,37 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_Receive(uint8_t* Bytes, uint8_t Length, 
 }
 
 /*
-    makes all connected ESC's beep
+    makes all connected ESCs beep
     beepFreqency = a 8 bit value from 0-255. higher make a higher beep
 */
-void AP_FETtecOneWire::FETtecOneWire_Beep(uint8_t beepFreqency)
+void AP_FETtecOneWire::Beep(uint8_t beepFreqency)
 {
-    if (FETtecOneWire_IDcount > 0) {
+    if (_IDcount > 0) {
         uint8_t request[2] = {OW_BEEP, beepFreqency};
         uint8_t spacer[2] = {0, 0};
-        for (uint8_t i = FETtecOneWire_minID; i < FETtecOneWire_maxID + 1; i++) {
-            FETtecOneWire_Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
-            // add two zeros to make sure all ESC's can catch their command as we don't wait for a response here
+        for (uint8_t i = _minID; i < _maxID + 1; i++) {
+            Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
+            // add two zeros to make sure all ESCs can catch their command as we don't wait for a response here
             _uart->write(spacer, 2);
-            FETtecOneWire_IgnoreOwnBytes += 2;
+            _IgnoreOwnBytes += 2;
         }
     }
 }
 
 /*
-    sets the racewire color for all ESC's
+    sets the racewire color for all ESCs
     R, G, B = 8bit colors
 */
-void AP_FETtecOneWire::FETtecOneWire_RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B)
+void AP_FETtecOneWire::RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B)
 {
-    if (FETtecOneWire_IDcount > 0) {
+    if (_IDcount > 0) {
         uint8_t request[4] = {OW_SET_LED_TMP_COLOR, R, G, B};
         uint8_t spacer[2] = {0, 0};
-        for (uint8_t i = FETtecOneWire_minID; i < FETtecOneWire_maxID + 1; i++) {
-            FETtecOneWire_Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
-            // add two zeros to make sure all ESC's can catch their command as we dont wait for a response here
+        for (uint8_t i = _minID; i < _maxID + 1; i++) {
+            Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
+            // add two zeros to make sure all ESCs can catch their command as we don't wait for a response here
             _uart->write(spacer, 2);
-            FETtecOneWire_IgnoreOwnBytes += 2;
+            _IgnoreOwnBytes += 2;
         }
     }
 }
@@ -445,41 +445,41 @@ void AP_FETtecOneWire::FETtecOneWire_RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B
     Resets a pending pull request
     returns nothing
 */
-void AP_FETtecOneWire::FETtecOneWire_PullReset()
+void AP_FETtecOneWire::PullReset()
 {
-    FETtecOneWire_PullSuccess = 0;
-    FETtecOneWire_PullBusy = 0;
+    _PullSuccess = 0;
+    _PullBusy = 0;
 }
 
 /*
     Pulls a complete request between for ESC
     ESC_id = id of the ESC
-    command = 8bit array containing the command that thould be send including the possible payload
+    command = 8bit array containing the command that should be send including the possible payload
     response = 8bit array where the response will be stored in
     returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
     returns 1 if the request is completed, 0 if dont
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_PullCommand(uint8_t ESC_id, uint8_t* command, uint8_t* response,
+uint8_t AP_FETtecOneWire::PullCommand(uint8_t ESC_id, uint8_t* command, uint8_t* response,
         uint8_t returnFullFrame)
 {
-    if (!FETtecOneWire_PullBusy) {
-        FETtecOneWire_PullBusy = 1;
-        FETtecOneWire_PullSuccess = 0;
-        FETtecOneWire_Transmit(ESC_id, command, FETtecOneWire_RequestLength[command[0]]);
+    if (!_PullBusy) {
+        _PullBusy = 1;
+        _PullSuccess = 0;
+        Transmit(ESC_id, command, FETtecOneWire_RequestLength[command[0]]);
     } else {
-        if (FETtecOneWire_Receive(response, FETtecOneWire_ResponseLength[command[0]], returnFullFrame)) {
-            FETtecOneWire_PullSuccess = 1;
-            FETtecOneWire_PullBusy = 0;
+        if (Receive(response, FETtecOneWire_ResponseLength[command[0]], returnFullFrame)) {
+            _PullSuccess = 1;
+            _PullBusy = 0;
         }
     }
-    return FETtecOneWire_PullSuccess;
+    return _PullSuccess;
 }
 
 /*
-    scans for ESC's in bus. should be called untill FETtecOneWire_ScanActive >= MAX_SUPPORTED_CH
+    scans for ESCs in bus. should be called until _ScanActive >= MAX_SUPPORTED_CH
     returns the currend scanned ID
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
+uint8_t AP_FETtecOneWire::ScanESCs()
 {
     static uint16_t delayLoops = 500;
     static uint8_t scanID = 0;
@@ -487,36 +487,36 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
     static uint8_t scanTimeOut = 0;
     uint8_t response[18] = {0};
     uint8_t request[1] = {0};
-    if (FETtecOneWire_ScanActive == 0) {
+    if (_ScanActive == 0) {
         delayLoops = 500;
         scanID = 0;
         scanState = 0;
         scanTimeOut = 0;
-        return FETtecOneWire_ScanActive + 1;
+        return _ScanActive + 1;
     }
     if (delayLoops > 0) {
         delayLoops--;
-        return FETtecOneWire_ScanActive;
+        return _ScanActive;
     }
-    if (scanID < FETtecOneWire_ScanActive) {
-        scanID = FETtecOneWire_ScanActive;
+    if (scanID < _ScanActive) {
+        scanID = _ScanActive;
         scanState = 0;
         scanTimeOut = 0;
     }
     if (scanTimeOut == 3 || scanTimeOut == 6 || scanTimeOut == 9 || scanTimeOut == 12) {
-        FETtecOneWire_PullReset();
+        PullReset();
     }
     if (scanTimeOut < 15) {
         switch (scanState) {
         case 0:request[0] = OW_OK;
-            if (FETtecOneWire_PullCommand(scanID, request, response, OW_RETURN_FULL_FRAME)) {
+            if (PullCommand(scanID, request, response, OW_RETURN_FULL_FRAME)) {
                 scanTimeOut = 0;
-                FETtecOneWire_activeESC_IDs[scanID] = 1;
-                FETtecOneWire_FoundESCs++;
+                _activeESC_IDs[scanID] = 1;
+                _FoundESCs++;
                 if (response[0] == 0x02) {
-                    FETtecOneWire_foundESCs[scanID].inBootLoader = 1;
+                    _foundESCs[scanID].inBootLoader = 1;
                 } else {
-                    FETtecOneWire_foundESCs[scanID].inBootLoader = 0;
+                    _foundESCs[scanID].inBootLoader = 0;
                 }
                 delayLoops = 1;
                 scanState++;
@@ -525,9 +525,9 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
             }
             break;
         case 1:request[0] = OW_REQ_TYPE;
-            if (FETtecOneWire_PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
+            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
                 scanTimeOut = 0;
-                FETtecOneWire_foundESCs[scanID].ESCtype = response[0];
+                _foundESCs[scanID].ESCtype = response[0];
                 delayLoops = 1;
                 scanState++;
             } else {
@@ -535,10 +535,10 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
             }
             break;
         case 2:request[0] = OW_REQ_SW_VER;
-            if (FETtecOneWire_PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
+            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
                 scanTimeOut = 0;
-                FETtecOneWire_foundESCs[scanID].firmWareVersion = response[0];
-                FETtecOneWire_foundESCs[scanID].firmWareSubVersion = response[1];
+                _foundESCs[scanID].firmWareVersion = response[0];
+                _foundESCs[scanID].firmWareSubVersion = response[1];
                 delayLoops = 1;
                 scanState++;
             } else {
@@ -546,10 +546,10 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
             }
             break;
         case 3:request[0] = OW_REQ_SN;
-            if (FETtecOneWire_PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
+            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
                 scanTimeOut = 0;
                 for (uint8_t i = 0; i < 12; i++) {
-                    FETtecOneWire_foundESCs[scanID].serialNumber[i] = response[i];
+                    _foundESCs[scanID].serialNumber[i] = response[i];
                 }
                 delayLoops = 1;
                 return scanID + 1;
@@ -559,17 +559,17 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_ScanESCs()
             break;
         }
     } else {
-        FETtecOneWire_PullReset();
+        PullReset();
         return scanID + 1;
     }
     return scanID;
 }
 
 /*
-    starts all ESC's in bus and prepares them for receiving the fast throttle command should be called untill FETtecOneWire_SetupActive >= MAX_SUPPORTED_CH
+    starts all ESCs in bus and prepares them for receiving the fast throttle command should be called until _SetupActive >= MAX_SUPPORTED_CH
     returns the current used ID
 */
-uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
+uint8_t AP_FETtecOneWire::InitESCs()
 {
     static uint8_t delayLoops = 0;
     static uint8_t activeID = 1;
@@ -579,79 +579,79 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
     static uint8_t setFastCommand[4] = {OW_SET_FAST_COM_LENGTH, 0, 0, 0};
     uint8_t response[18] = {0};
     uint8_t request[1] = {0};
-    if (FETtecOneWire_SetupActive == 0) {
+    if (_SetupActive == 0) {
         delayLoops = 0;
         activeID = 1;
         State = 0;
         TimeOut = 0;
         wakeFromBL = 1;
-        return FETtecOneWire_SetupActive + 1;
+        return _SetupActive + 1;
     }
-    while (FETtecOneWire_activeESC_IDs[FETtecOneWire_SetupActive] == 0 && FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
-        FETtecOneWire_SetupActive++;
+    while (_activeESC_IDs[_SetupActive] == 0 && _SetupActive < MAX_SUPPORTED_CH) {
+        _SetupActive++;
     }
 
-    if (FETtecOneWire_SetupActive == MAX_SUPPORTED_CH && wakeFromBL == 0) {
-        return FETtecOneWire_SetupActive;
-    } else if (FETtecOneWire_SetupActive == MAX_SUPPORTED_CH && wakeFromBL) {
+    if (_SetupActive == MAX_SUPPORTED_CH && wakeFromBL == 0) {
+        return _SetupActive;
+    } else if (_SetupActive == MAX_SUPPORTED_CH && wakeFromBL) {
         wakeFromBL = 0;
         activeID = 1;
-        FETtecOneWire_SetupActive = 1;
+        _SetupActive = 1;
         State = 0;
         TimeOut = 0;
 
-        FETtecOneWire_minID = MAX_SUPPORTED_CH;
-        FETtecOneWire_maxID = 0;
-        FETtecOneWire_IDcount = 0;
+        _minID = MAX_SUPPORTED_CH;
+        _maxID = 0;
+        _IDcount = 0;
         for (uint8_t i = 0; i < MAX_SUPPORTED_CH; i++) {
-            if (FETtecOneWire_activeESC_IDs[i] != 0) {
-                FETtecOneWire_IDcount++;
-                if (i < FETtecOneWire_minID) {
-                    FETtecOneWire_minID = i;
+            if (_activeESC_IDs[i] != 0) {
+                _IDcount++;
+                if (i < _minID) {
+                    _minID = i;
                 }
-                if (i > FETtecOneWire_maxID) {
-                    FETtecOneWire_maxID = i;
+                if (i > _maxID) {
+                    _maxID = i;
                 }
             }
         }
 
-        if (FETtecOneWire_IDcount == 0
-                || FETtecOneWire_maxID - FETtecOneWire_minID > FETtecOneWire_IDcount - 1) { // loop forever
+        if (_IDcount == 0
+                || _maxID - _minID > _IDcount - 1) { // loop forever
             wakeFromBL = 1;
             return activeID;
         }
-        FETtecOneWire_FastThrottleByteCount = 1;
-        int8_t bitCount = 12 + (FETtecOneWire_IDcount * 11);
+        _FastThrottleByteCount = 1;
+        int8_t bitCount = 12 + (_IDcount * 11);
         while (bitCount > 0) {
-            FETtecOneWire_FastThrottleByteCount++;
+            _FastThrottleByteCount++;
             bitCount -= 8;
         }
-        setFastCommand[1] = FETtecOneWire_FastThrottleByteCount; // just for older ESC FW versions since 1.0 001 this byte is ignored as the ESC calculates it itself
-        setFastCommand[2] = FETtecOneWire_minID;                 // min ESC id
-        setFastCommand[3] = FETtecOneWire_IDcount;               // count of ESC's that will get signals
+        setFastCommand[1] = _FastThrottleByteCount; // just for older ESC FW versions since 1.0 001 this byte is ignored as the ESC calculates it itself
+        setFastCommand[2] = _minID;                 // min ESC id
+        setFastCommand[3] = _IDcount;               // count of ESCs that will get signals
     }
 
     if (delayLoops > 0) {
         delayLoops--;
-        return FETtecOneWire_SetupActive;
+        return _SetupActive;
     }
 
-    if (activeID < FETtecOneWire_SetupActive) {
-        activeID = FETtecOneWire_SetupActive;
+    if (activeID < _SetupActive) {
+        activeID = _SetupActive;
         State = 0;
         TimeOut = 0;
     }
 
     if (TimeOut == 3 || TimeOut == 6 || TimeOut == 9 || TimeOut == 12) {
-        FETtecOneWire_PullReset();
+        PullReset();
     }
 
     if (TimeOut < 15) {
         if (wakeFromBL) {
             switch (State) {
             case 0:request[0] = OW_BL_START_FW;
-                if (FETtecOneWire_foundESCs[activeID].inBootLoader == 1) {
-                    FETtecOneWire_Transmit(activeID, request, FETtecOneWire_RequestLength[request[0]]);
+                if (_foundESCs[activeID].inBootLoader == 1) {
+                    Transmit(activeID, request, FETtecOneWire_RequestLength[request[0]]);
                     delayLoops = 5;
                 } else {
                     return activeID + 1;
@@ -659,13 +659,13 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
                 State = 1;
                 break;
             case 1:request[0] = OW_OK;
-                if (FETtecOneWire_PullCommand(activeID, request, response, OW_RETURN_FULL_FRAME)) {
+                if (PullCommand(activeID, request, response, OW_RETURN_FULL_FRAME)) {
                     TimeOut = 0;
                     if (response[0] == 0x02) {
-                        FETtecOneWire_foundESCs[activeID].inBootLoader = 1;
+                        _foundESCs[activeID].inBootLoader = 1;
                         State = 0;
                     } else {
-                        FETtecOneWire_foundESCs[activeID].inBootLoader = 0;
+                        _foundESCs[activeID].inBootLoader = 0;
                         delayLoops = 1;
                         return activeID + 1;
                     }
@@ -675,7 +675,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
                 break;
             }
         } else {
-            if (FETtecOneWire_PullCommand(activeID, setFastCommand, response, OW_RETURN_RESPONSE)) {
+            if (PullCommand(activeID, setFastCommand, response, OW_RETURN_RESPONSE)) {
                 TimeOut = 0;
                 delayLoops = 1;
                 return activeID + 1;
@@ -684,7 +684,7 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
             }
         }
     } else {
-        FETtecOneWire_PullReset();
+        PullReset();
         return activeID + 1;
     }
     return activeID;
@@ -695,25 +695,25 @@ uint8_t AP_FETtecOneWire::FETtecOneWire_InitESCs()
     Telemetry = 16bit array where the read Telemetry will be stored in. 
     returns the telemetry request number or -1 if unavailable
 */
-int8_t AP_FETtecOneWire::FETtecOneWire_CheckForTLM(uint16_t* Telemetry)
+int8_t AP_FETtecOneWire::CheckForTLM(uint16_t* Telemetry)
 {
     int8_t return_TLM_request = 0;
-    if (FETtecOneWire_IDcount > 0) {
+    if (_IDcount > 0) {
         // empty buffer
-        while (FETtecOneWire_IgnoreOwnBytes > 0 && _uart->available()) {
+        while (_IgnoreOwnBytes > 0 && _uart->available()) {
             _uart->read();
-            FETtecOneWire_IgnoreOwnBytes--;
+            _IgnoreOwnBytes--;
         }
 
         // first two byte are the ESC Telemetry of the first ESC. next two byte of the second....
-        if (_uart->available() == (FETtecOneWire_IDcount * 2) + 1u) {
+        if (_uart->available() == (_IDcount * 2) + 1u) {
             // look if first byte in buffer is equal to last byte of throttle command (crc)
-            if (_uart->read() == FETtecOneWire_lastCRC) {
-                for (uint8_t i = 0; i < FETtecOneWire_IDcount; i++) {
+            if (_uart->read() == _lastCRC) {
+                for (uint8_t i = 0; i < _IDcount; i++) {
                     Telemetry[i] = _uart->read() << 8;
                     Telemetry[i] |= _uart->read();
                 }
-                return_TLM_request = FETtecOneWire_TLM_request;
+                return_TLM_request = _TLM_request;
             } else {
                 return_TLM_request = -1;
             }
@@ -728,8 +728,8 @@ int8_t AP_FETtecOneWire::FETtecOneWire_CheckForTLM(uint16_t* Telemetry)
 
 /*
     does almost all of the job.
-    scans for ESC's if not already done.
-    initializes the ESC's if not already done.
+    scans for ESCs if not already done.
+    initializes the ESCs if not already done.
     sends fast throttle signals if init is complete.
     motorValues = a 16bit array containing the throttle signals that should be sent to the motors. 0-2000 where 1001-2000 is positive rotation and 999-0 reversed rotation
     Telemetry = 16bit array where the read telemetry will be stored in. 
@@ -737,13 +737,13 @@ int8_t AP_FETtecOneWire::FETtecOneWire_CheckForTLM(uint16_t* Telemetry)
     tlmRequest = the requested telemetry type (OW_TLM_XXXXX)
     returns the telemetry request if telemetry was available, -1 if dont
 */
-int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint16_t* Telemetry, uint8_t motorCount,
+int8_t AP_FETtecOneWire::ESCsSetValues(uint16_t* motorValues, uint16_t* Telemetry, uint8_t motorCount,
         uint8_t tlmRequest)
 {
     int8_t return_TLM_request = -2;
 
     // init should not be done too fast. as at last the bootloader has some timing requirements with messages. so loop delays must fit more or less
-    if (FETtecOneWire_ScanActive < MAX_SUPPORTED_CH || FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
+    if (_ScanActive < MAX_SUPPORTED_CH || _SetupActive < MAX_SUPPORTED_CH) {
         const uint32_t now = AP_HAL::micros();
         if (now - last_send_us < DELAY_TIME_US) {
             return 0;
@@ -751,30 +751,30 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
             last_send_us = now;
         }
 
-        if (FETtecOneWire_ScanActive < MAX_SUPPORTED_CH) {
-            // scan for all ESC's in onewire bus
-            FETtecOneWire_ScanActive = FETtecOneWire_ScanESCs();
-        } else if (FETtecOneWire_SetupActive < MAX_SUPPORTED_CH) {
-            if (FETtecOneWire_FoundESCs == 0) {
-                FETtecOneWire_ScanActive = 0;
+        if (_ScanActive < MAX_SUPPORTED_CH) {
+            // scan for all ESCs in onewire bus
+            _ScanActive = ScanESCs();
+        } else if (_SetupActive < MAX_SUPPORTED_CH) {
+            if (_FoundESCs == 0) {
+                _ScanActive = 0;
             } else {
-                // check if in bootloader, start ESC's FW if they are and prepare fast throttle command
-                FETtecOneWire_SetupActive = FETtecOneWire_InitESCs();
+                // check if in bootloader, start ESCs FW if they are and prepare fast throttle command
+                _SetupActive = InitESCs();
             }
         }
     } else {
         //send fast throttle signals
-        if (FETtecOneWire_IDcount > 0) {
+        if (_IDcount > 0) {
 
             // check for telemetry
-            return_TLM_request = FETtecOneWire_CheckForTLM(Telemetry);
-            FETtecOneWire_TLM_request = tlmRequest;
+            return_TLM_request = CheckForTLM(Telemetry);
+            _TLM_request = tlmRequest;
 
             //prepare fast throttle signals
             uint16_t useSignals[24] = {0};
             uint8_t OneWireFastThrottleCommand[36] = {0};
-            if (motorCount > FETtecOneWire_IDcount) {
-                motorCount = FETtecOneWire_IDcount;
+            if (motorCount > _IDcount) {
+                motorCount = _IDcount;
             }
             for (uint8_t i = 0; i < motorCount; i++) {
                 useSignals[i] = constrain_int16(motorValues[i], 0, 2000);
@@ -789,7 +789,7 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
             // B = TLM request type (temp, volt, current, erpm, consumption, debug1, debug2, debug3)
             // C = first bit from first throttle signal
             // D = frame header
-            OneWireFastThrottleCommand[0] = 128 | (FETtecOneWire_TLM_request << 4);
+            OneWireFastThrottleCommand[0] = 128 | (_TLM_request << 4);
             OneWireFastThrottleCommand[0] |= ((useSignals[actThrottleCommand] >> 10) & 0x01) << 3;
             OneWireFastThrottleCommand[0] |= 0x01;
 
@@ -800,11 +800,11 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
             OneWireFastThrottleCommand[1] = (((useSignals[actThrottleCommand] >> 7) & 0x07)) << 5;
             OneWireFastThrottleCommand[1] |= ALL_ID;
 
-            // following bytes are the rest 7 bit of the first (11bit)throttle signal, and all bit from all other signals, followed by the CRC byte
+            // following bytes are the rest 7 bit of the first (11bit) throttle signal, and all bit from all other signals, followed by the CRC byte
             uint8_t BitsLeftFromCommand = 7;
             uint8_t actByte = 2;
             uint8_t bitsFromByteLeft = 8;
-            uint8_t bitsToAddLeft = (12 + (((FETtecOneWire_maxID - FETtecOneWire_minID) + 1) * 11)) - 16;
+            uint8_t bitsToAddLeft = (12 + (((_maxID - _minID) + 1) * 11)) - 16;
             while (bitsToAddLeft > 0) {
                 if (bitsFromByteLeft >= BitsLeftFromCommand) {
                     OneWireFastThrottleCommand[actByte] |=
@@ -838,15 +838,15 @@ int8_t AP_FETtecOneWire::FETtecOneWire_ESCsSetValues(uint16_t* motorValues, uint
             }
 
             // send throttle signal
-            OneWireFastThrottleCommand[FETtecOneWire_FastThrottleByteCount - 1] = FETtecOneWire_GetCrc8(
-                    OneWireFastThrottleCommand, FETtecOneWire_FastThrottleByteCount - 1);
-            _uart->write(OneWireFastThrottleCommand, FETtecOneWire_FastThrottleByteCount);
+            OneWireFastThrottleCommand[_FastThrottleByteCount - 1] = GetCrc8(
+                    OneWireFastThrottleCommand, _FastThrottleByteCount - 1);
+            _uart->write(OneWireFastThrottleCommand, _FastThrottleByteCount);
             // last byte of signal can be used to make sure the first TLM byte is correct, in case of spike corruption
-            FETtecOneWire_IgnoreOwnBytes = FETtecOneWire_FastThrottleByteCount - 1;
-            FETtecOneWire_lastCRC = OneWireFastThrottleCommand[FETtecOneWire_FastThrottleByteCount - 1];
-            // the ESC's will answer the TLM as 16bit each ESC, so 2byte each ESC.
+            _IgnoreOwnBytes = _FastThrottleByteCount - 1;
+            _lastCRC = OneWireFastThrottleCommand[_FastThrottleByteCount - 1];
+            // the ESCs will answer the TLM as 16bit each ESC, so 2byte each ESC.
         }
     }
-    return return_TLM_request; // returns the readed tlm as it is 1 loop delayed
+    return return_TLM_request; // returns the read tlm as it is 1 loop delayed
 }
 #endif  // HAL_AP_FETTECONEWIRE_ENABLED

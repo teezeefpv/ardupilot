@@ -57,7 +57,7 @@ private:
     static constexpr uint32_t DELAY_TIME_US = 700;
     static constexpr uint8_t DETECT_ESC_COUNT = 4;  // TODO needed ?
     static constexpr uint8_t MOTOR_COUNT_MAX = 8;
-    static constexpr uint8_t MAX_SUPPORTED_CH = MIN(NUM_SERVO_CHANNELS, 25);
+    static constexpr uint8_t MAX_SUPPORTED_CH = MIN(NUM_SERVO_CHANNELS, 25); // makes no sense to support 25 ESCs if ardupilot supports less than that
     int8_t TelemetryAvailable = -1;
     uint16_t completeTelemetry[MOTOR_COUNT_MAX][6] = {0};
     uint16_t motorpwm[MOTOR_COUNT_MAX] = {1000};
@@ -65,12 +65,12 @@ private:
     /*
     initialize FETtecOneWire protocol
 */
-    void FETtecOneWire_Init(void);
+    void Init(void);
 
 /*
     deinitialize FETtecOneWire protocol
 */
-    void FETtecOneWire_DeInit(void);
+    void DeInit(void);
 
 /*
     generates used 8 bit CRC
@@ -78,7 +78,7 @@ private:
     crc_seed = CRC where it gets added too
     returns 8 bit CRC
 */
-    uint8_t FETtecOneWire_Update_crc8(uint8_t crc, uint8_t crc_seed);
+    uint8_t Update_crc8(uint8_t crc, uint8_t crc_seed);
 
 /*
     generates used 8 bit CRC for arrays
@@ -86,7 +86,7 @@ private:
     BufLen = count of bytes that should be used for CRC calculation
     returns 8 bit CRC
 */
-    uint8_t FETtecOneWire_Get_crc8(uint8_t *Buf, uint16_t BufLen);
+    uint8_t Get_crc8(uint8_t *Buf, uint16_t BufLen);
 
 /*
     transmitts a FETtecOneWire frame to a ESC
@@ -95,7 +95,7 @@ private:
     Length = length of the Bytes array
     returns nothing
 */
-    void FETtecOneWire_Transmit(uint8_t ESC_id, uint8_t *Bytes, uint8_t Length);
+    void Transmit(uint8_t ESC_id, uint8_t *Bytes, uint8_t Length);
 
 /*
     reads the answer frame of a ESC
@@ -104,59 +104,59 @@ private:
     returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
     returns 1 if the expected answer frame was there, 0 if dont
 */
-    uint8_t FETtecOneWire_Receive(uint8_t *Bytes, uint8_t Length, uint8_t returnFullFrame);
+    uint8_t Receive(uint8_t *Bytes, uint8_t Length, uint8_t returnFullFrame);
 
 /*
-    makes all connected ESC's beep
+    makes all connected ESCs beep
     beepFreqency = a 8 bit value from 0-255. higher make a higher beep
 */
-    void FETtecOneWire_Beep(uint8_t beepFreqency);
+    void Beep(uint8_t beepFreqency);
 
 /*
-    sets the racewire color for all ESC's
+    sets the racewire color for all ESCs
     R, G, B = 8bit colors
 */
-    void FETtecOneWire_RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B);
+    void RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B);
 
 /*
     Resets a pending pull request
     returns nothing
 */
-    void FETtecOneWire_PullReset(void);
+    void PullReset(void);
 
 /*
     Pulls a complete request between for ESC
     ESC_id = id of the ESC
-    command = 8bit array containing the command that thould be send including the possible payload
+    command = 8bit array containing the command that should be send including the possible payload
     response = 8bit array where the response will be stored in
     returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
     returns 1 if the request is completed, 0 if dont
 */
-    uint8_t FETtecOneWire_PullCommand(uint8_t ESC_id, uint8_t *command, uint8_t *response, uint8_t returnFullFrame);
+    uint8_t PullCommand(uint8_t ESC_id, uint8_t *command, uint8_t *response, uint8_t returnFullFrame);
 
 /*
-    scans for ESC's in bus. should be called untill FETtecOneWire_ScanActive >= MAX_SUPPORTED_CH
+    scans for ESCs in bus. should be called until _ScanActive >= MAX_SUPPORTED_CH
     returns the current scanned ID
 */
-    uint8_t FETtecOneWire_ScanESCs(void);
+    uint8_t ScanESCs(void);
 
 /*
-    starts all ESC's in bus and prepares them for receiving teh fast throttle command should be called untill FETtecOneWire_SetupActive >= MAX_SUPPORTED_CH
+    starts all ESCs in bus and prepares them for receiving teh fast throttle command should be called until _SetupActive >= MAX_SUPPORTED_CH
     returns the current used ID
 */
-    uint8_t FETtecOneWire_InitESCs(void);
+    uint8_t InitESCs(void);
 
 /*
     checks if the requested telemetry is available.
     Telemetry = 16bit array where the read Telemetry will be stored in.
     returns the telemetry request number or -1 if unavailable
 */
-    int8_t FETtecOneWire_CheckForTLM(uint16_t *Telemetry);
+    int8_t CheckForTLM(uint16_t *Telemetry);
 
 /*
     does almost all of the job.
-    scans for ESC's if not already done.
-    initializes the ESC's if not already done.
+    scans for ESCs if not already done.
+    initializes the ESCs if not already done.
     sends fast throttle signals if init is complete.
     motorValues = a 16bit array containing the throttle signals that should be sent to the motors. 0-2000 where 1001-2000 is positive rotation and 999-0 reversed rotation
     Telemetry = 16bit array where the read telemetry will be stored in.
@@ -164,10 +164,10 @@ private:
     tlmRequest = the requested telemetry type (OW_TLM_XXXXX)
     returns the telemetry request if telemetry was available, -1 if dont
 */
-    int8_t FETtecOneWire_ESCsSetValues(uint16_t *motorValues, uint16_t *Telemetry, uint8_t motorCount, uint8_t tlmRequest);
+    int8_t ESCsSetValues(uint16_t *motorValues, uint16_t *Telemetry, uint8_t motorCount, uint8_t tlmRequest);
 
-    uint8_t FETtecOneWire_UpdateCrc8(uint8_t crc, uint8_t crc_seed);  //TODO remove
-    uint8_t FETtecOneWire_GetCrc8(uint8_t* Buf, uint16_t BufLen);
+    uint8_t UpdateCrc8(uint8_t crc, uint8_t crc_seed);  //TODO remove
+    uint8_t GetCrc8(uint8_t* Buf, uint16_t BufLen);
     static constexpr uint8_t ALL_ID = 0x1F;
     typedef struct FETtecOneWireESC
     {
@@ -178,21 +178,21 @@ private:
       uint8_t serialNumber[12];
     } FETtecOneWireESC_t;
 
-    uint8_t FETtecOneWire_activeESC_IDs[MAX_SUPPORTED_CH] = {0};
-    FETtecOneWireESC_t FETtecOneWire_foundESCs[MAX_SUPPORTED_CH];
-    uint8_t FETtecOneWire_FoundESCs = 0;
-    uint8_t FETtecOneWire_ScanActive = 0;
-    uint8_t FETtecOneWire_SetupActive = 0;
-    uint8_t FETtecOneWire_IgnoreOwnBytes = 0;
-    int8_t FETtecOneWire_minID = MAX_SUPPORTED_CH;
-    int8_t FETtecOneWire_maxID = 0;
-    uint8_t FETtecOneWire_IDcount = 0;
-    uint8_t FETtecOneWire_FastThrottleByteCount = 0;
-    uint8_t FETtecOneWire_PullSuccess = 0;
-    uint8_t FETtecOneWire_PullBusy = 0;
-    uint8_t FETtecOneWire_TLM_request = 0;
-    uint8_t FETtecOneWire_lastCRC = 0;
-    uint8_t FETtecOneWire_firstInitDone = 0;
+    uint8_t _activeESC_IDs[MAX_SUPPORTED_CH] = {0};
+    FETtecOneWireESC_t _foundESCs[MAX_SUPPORTED_CH];
+    uint8_t _FoundESCs = 0;
+    uint8_t _ScanActive = 0;
+    uint8_t _SetupActive = 0;
+    uint8_t _IgnoreOwnBytes = 0;
+    int8_t _minID = MAX_SUPPORTED_CH;
+    int8_t _maxID = 0;
+    uint8_t _IDcount = 0;
+    uint8_t _FastThrottleByteCount = 0;
+    uint8_t _PullSuccess = 0;
+    uint8_t _PullBusy = 0;
+    uint8_t _TLM_request = 0;
+    uint8_t _lastCRC = 0;
+    uint8_t _firstInitDone = 0;
 
 
     enum
