@@ -245,7 +245,7 @@ void AP_FETtecOneWire::send_esc_telemetry_mavlink(uint8_t mav_chan)
         rpm[idx] = completeTelemetry[i][3];
         totalcurrent[idx] = completeTelemetry[i][4];
         count[idx] = completeTelemetry[i][5];
-        if (i % 4 == 3 || i == MOTOR_COUNT_MAX - 1) {
+        if (idx == 3 || i == MOTOR_COUNT_MAX - 1) {
             if (!HAVE_PAYLOAD_SPACE((mavlink_channel_t)mav_chan, ESC_TELEMETRY_1_TO_4)) {
                 return;
             }
