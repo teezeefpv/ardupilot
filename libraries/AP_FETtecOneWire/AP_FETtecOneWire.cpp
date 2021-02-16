@@ -194,19 +194,19 @@ void AP_FETtecOneWire::update()
     }
 
     if (TelemetryAvailable != -1) {
-        for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
-            printf(" esc: %d", i + 1);
-            printf(" Temperature: %d", completeTelemetry[i][0]);
-            printf(", Voltage: %d", completeTelemetry[i][1]);
-            printf(", Current: %d", completeTelemetry[i][2]);
-            printf(", E-rpm: %d", completeTelemetry[i][3]);
-            printf(", consumption: %d", completeTelemetry[i][4]);
-            printf("\n");
-            AP_Logger *logger = AP_Logger::get_singleton();
+        AP_Logger *logger = AP_Logger::get_singleton();
+        const uint32_t now = AP_HAL::millis();
+        // log at 10Hz
+        if (logger && logger->logging_enabled() && now - last_log_ms > 100) {
+            for (uint8_t i = 0; i < MOTOR_COUNT_MAX; i++) {
+                printf(" esc: %d", i + 1);
+                printf(" Temperature: %d", completeTelemetry[i][0]);
+                printf(", Voltage: %d", completeTelemetry[i][1]);
+                printf(", Current: %d", completeTelemetry[i][2]);
+                printf(", E-rpm: %d", completeTelemetry[i][3]);
+                printf(", consumption: %d", completeTelemetry[i][4]);
+                printf("\n");
 
-            // log at 10Hz
-            const uint32_t now = AP_HAL::millis();
-            if (logger && logger->logging_enabled() && now - last_log_ms > 100) {
                 logger->Write_ESC(i,
                         AP_HAL::micros64(),
                         completeTelemetry[i][3] * 100U,
@@ -216,8 +216,8 @@ void AP_FETtecOneWire::update()
                         completeTelemetry[i][4],
                         0,
                         0);
-                last_log_ms = now;
             }
+            last_log_ms = now;
         }
     }
 
