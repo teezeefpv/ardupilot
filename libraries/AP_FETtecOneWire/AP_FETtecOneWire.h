@@ -57,7 +57,7 @@ private:
     static constexpr uint32_t DELAY_TIME_US = 700;
     static constexpr uint8_t DETECT_ESC_COUNT = 4;  // TODO needed ?
     static constexpr uint8_t MOTOR_COUNT_MAX = 8;
-    static constexpr uint8_t MAX_SUPPORTED_CH = MIN(NUM_SERVO_CHANNELS, 25); // makes no sense to support 25 ESCs if ardupilot supports less than that
+    static constexpr uint8_t MAX_SUPPORTED_CH = 16;//MIN(NUM_SERVO_CHANNELS, 25); // makes no sense to support 25 ESCs if ardupilot supports less than that
     int8_t TelemetryAvailable = -1;
     uint16_t completeTelemetry[MOTOR_COUNT_MAX][6] = {0};
     uint16_t motorpwm[MOTOR_COUNT_MAX] = {1000};
