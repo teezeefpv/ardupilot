@@ -225,6 +225,7 @@ void AP_FETtecOneWire::update()
 
 /*
   send ESC telemetry messages over MAVLink
+  @param mav_chan mavlink channel
  */
 void AP_FETtecOneWire::send_esc_telemetry_mavlink(uint8_t mav_chan)
 {
@@ -285,9 +286,9 @@ void AP_FETtecOneWire::Init()
 
 /*
     generates used 8 bit CRC
-    crc = byte to be added to CRC
-    crc_seed = CRC where it gets added too
-    returns 8 bit CRC
+    @param crc byte to be added to CRC
+    @param crc_seed CRC where it gets added too
+    @return 8 bit CRC
 */
 uint8_t AP_FETtecOneWire::UpdateCrc8(uint8_t crc, uint8_t crc_seed)
 {
@@ -302,9 +303,9 @@ uint8_t AP_FETtecOneWire::UpdateCrc8(uint8_t crc, uint8_t crc_seed)
 
 /*
     generates used 8 bit CRC for arrays
-    Buf = 8 bit byte array
-    BufLen = count of bytes that should be used for CRC calculation
-    returns 8 bit CRC
+    @param Buf 8 bit byte array
+    @param BufLen count of bytes that should be used for CRC calculation
+    @return 8 bit CRC
 */
 uint8_t AP_FETtecOneWire::GetCrc8(uint8_t* Buf, uint16_t BufLen)
 {
@@ -317,10 +318,9 @@ uint8_t AP_FETtecOneWire::GetCrc8(uint8_t* Buf, uint16_t BufLen)
 
 /*
     transmitts a FETtecOneWire frame to a ESC
-    ESC_id = id of the ESC
-    Bytes = 8 bit array of bytes. Where byte 1 contains the command, and all following bytes can be the payload
-    Length = length of the Bytes array
-    returns nothing
+    @param ESC_id id of the ESC
+    @param Bytes 8 bit array of bytes. Where byte 1 contains the command, and all following bytes can be the payload
+    @param Length length of the Bytes array
 */
 void AP_FETtecOneWire::Transmit(uint8_t ESC_id, uint8_t* Bytes, uint8_t Length)
 {
@@ -345,10 +345,10 @@ void AP_FETtecOneWire::Transmit(uint8_t ESC_id, uint8_t* Bytes, uint8_t Length)
 
 /*
     reads the answer frame of a ESC
-    Bytes = 8 bit byte array, where the received answer gets stored in
-    Length = the expected answer length
-    returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
-    returns 1 if the expected answer frame was there, 0 if dont
+    @param Bytes 8 bit byte array, where the received answer gets stored in
+    @param Length the expected answer length
+    @param returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
+    @return 1 if the expected answer frame was there, 0 if dont
 */
 uint8_t AP_FETtecOneWire::Receive(uint8_t* Bytes, uint8_t Length, uint8_t returnFullFrame)
 {
@@ -407,7 +407,7 @@ uint8_t AP_FETtecOneWire::Receive(uint8_t* Bytes, uint8_t Length, uint8_t return
 
 /*
     makes all connected ESCs beep
-    beepFreqency = a 8 bit value from 0-255. higher make a higher beep
+    @param beepFreqency a 8 bit value from 0-255. higher make a higher beep
 */
 void AP_FETtecOneWire::Beep(uint8_t beepFreqency)
 {
@@ -425,7 +425,9 @@ void AP_FETtecOneWire::Beep(uint8_t beepFreqency)
 
 /*
     sets the racewire color for all ESCs
-    R, G, B = 8bit colors
+    @param R red brightness
+    @param G green brightness
+    @param B blue brightness
 */
 void AP_FETtecOneWire::RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B)
 {
@@ -453,11 +455,11 @@ void AP_FETtecOneWire::PullReset()
 
 /*
     Pulls a complete request between for ESC
-    ESC_id = id of the ESC
-    command = 8bit array containing the command that should be send including the possible payload
-    response = 8bit array where the response will be stored in
-    returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
-    returns 1 if the request is completed, 0 if dont
+    @param ESC_id  id of the ESC
+    @param command 8bit array containing the command that should be send including the possible payload
+    @param response 8bit array where the response will be stored in
+    @param returnFullFrame can be OW_RETURN_RESPONSE or OW_RETURN_FULL_FRAME
+    @return 1 if the request is completed, 0 if dont
 */
 uint8_t AP_FETtecOneWire::PullCommand(uint8_t ESC_id, uint8_t* command, uint8_t* response,
         uint8_t returnFullFrame)
@@ -692,8 +694,8 @@ uint8_t AP_FETtecOneWire::InitESCs()
 
 /*
     checks if the requested telemetry is available. 
-    Telemetry = 16bit array where the read Telemetry will be stored in. 
-    returns the telemetry request number or -1 if unavailable
+    @param Telemetry 16bit array where the read Telemetry will be stored in.
+    @return the telemetry request number or -1 if unavailable
 */
 int8_t AP_FETtecOneWire::CheckForTLM(uint16_t* Telemetry)
 {
@@ -731,11 +733,11 @@ int8_t AP_FETtecOneWire::CheckForTLM(uint16_t* Telemetry)
     scans for ESCs if not already done.
     initializes the ESCs if not already done.
     sends fast throttle signals if init is complete.
-    motorValues = a 16bit array containing the throttle signals that should be sent to the motors. 0-2000 where 1001-2000 is positive rotation and 999-0 reversed rotation
-    Telemetry = 16bit array where the read telemetry will be stored in. 
-    motorCount = the count of motors that should get values send
-    tlmRequest = the requested telemetry type (OW_TLM_XXXXX)
-    returns the telemetry request if telemetry was available, -1 if dont
+    @param motorValues a 16bit array containing the throttle signals that should be sent to the motors. 0-2000 where 1001-2000 is positive rotation and 999-0 reversed rotation
+    @param Telemetry 16bit array where the read telemetry will be stored in.
+    @param motorCount the count of motors that should get values send
+    @param tlmRequest the requested telemetry type (OW_TLM_XXXXX)
+    @return the telemetry request if telemetry was available, -1 if dont
 */
 int8_t AP_FETtecOneWire::ESCsSetValues(uint16_t* motorValues, uint16_t* Telemetry, uint8_t motorCount,
         uint8_t tlmRequest)
