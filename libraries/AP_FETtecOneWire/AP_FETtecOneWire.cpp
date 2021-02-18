@@ -250,6 +250,7 @@ void AP_FETtecOneWire::send_esc_telemetry_mavlink(uint8_t mav_chan)
             if (!HAVE_PAYLOAD_SPACE((mavlink_channel_t)mav_chan, ESC_TELEMETRY_1_TO_4)) {
                 return;
             }
+            static_assert(MOTOR_COUNT_MAX <= 12, "AP_FETtecOneWire::send_esc_telemetry_mavlink() support 12 or less motors");
             if (i < 4) {
                 mavlink_msg_esc_telemetry_1_to_4_send((mavlink_channel_t)mav_chan, temperature, voltage, current, totalcurrent, rpm, count);
             } else if (i < 8) {
