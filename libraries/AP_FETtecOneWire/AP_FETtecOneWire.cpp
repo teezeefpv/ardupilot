@@ -446,88 +446,84 @@ uint8_t AP_FETtecOneWire::PullCommand(uint8_t ESC_id, uint8_t* command, uint8_t*
 */
 uint8_t AP_FETtecOneWire::ScanESCs()
 {
-    static uint16_t delayLoops = 500;
-    static uint8_t scanID = 0;
-    static uint8_t scanState = 0;
-    static uint8_t scanTimeOut = 0;
     uint8_t response[18] = {0};
     uint8_t request[1] = {0};
     if (_ScanActive == 0) {
-        delayLoops = 500;
-        scanID = 0;
-        scanState = 0;
-        scanTimeOut = 0;
+        _ss.delayLoops = 500;
+        _ss.scanID = 0;
+        _ss.scanState = 0;
+        _ss.scanTimeOut = 0;
         return _ScanActive + 1;
     }
-    if (delayLoops > 0) {
-        delayLoops--;
+    if (_ss.delayLoops > 0) {
+        _ss.delayLoops--;
         return _ScanActive;
     }
-    if (scanID < _ScanActive) {
-        scanID = _ScanActive;
-        scanState = 0;
-        scanTimeOut = 0;
+    if (_ss.scanID < _ScanActive) {
+        _ss.scanID = _ScanActive;
+        _ss.scanState = 0;
+        _ss.scanTimeOut = 0;
     }
-    if (scanTimeOut == 3 || scanTimeOut == 6 || scanTimeOut == 9 || scanTimeOut == 12) {
+    if (_ss.scanTimeOut == 3 || _ss.scanTimeOut == 6 || _ss.scanTimeOut == 9 || _ss.scanTimeOut == 12) {
         PullReset();
     }
-    if (scanTimeOut < 15) {
-        switch (scanState) {
+    if (_ss.scanTimeOut < 15) {
+        switch (_ss.scanState) {
         case 0:request[0] = OW_OK;
-            if (PullCommand(scanID, request, response, OW_RETURN_FULL_FRAME)) {
-                scanTimeOut = 0;
-                _activeESC_IDs[scanID] = 1;
+            if (PullCommand(_ss.scanID, request, response, OW_RETURN_FULL_FRAME)) {
+                _ss.scanTimeOut = 0;
+                _activeESC_IDs[_ss.scanID] = 1;
                 _FoundESCs++;
                 if (response[0] == 0x02) {
-                    _foundESCs[scanID].inBootLoader = 1;
+                    _foundESCs[_ss.scanID].inBootLoader = 1;
                 } else {
-                    _foundESCs[scanID].inBootLoader = 0;
+                    _foundESCs[_ss.scanID].inBootLoader = 0;
                 }
-                delayLoops = 1;
-                scanState++;
+                _ss.delayLoops = 1;
+                _ss.scanState++;
             } else {
-                scanTimeOut++;
+                _ss.scanTimeOut++;
             }
             break;
         case 1:request[0] = OW_REQ_TYPE;
-            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
-                scanTimeOut = 0;
-                _foundESCs[scanID].ESCtype = response[0];
-                delayLoops = 1;
-                scanState++;
+            if (PullCommand(_ss.scanID, request, response, OW_RETURN_RESPONSE)) {
+                _ss.scanTimeOut = 0;
+                _foundESCs[_ss.scanID].ESCtype = response[0];
+                _ss.delayLoops = 1;
+                _ss.scanState++;
             } else {
-                scanTimeOut++;
+                _ss.scanTimeOut++;
             }
             break;
         case 2:request[0] = OW_REQ_SW_VER;
-            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
-                scanTimeOut = 0;
-                _foundESCs[scanID].firmWareVersion = response[0];
-                _foundESCs[scanID].firmWareSubVersion = response[1];
-                delayLoops = 1;
-                scanState++;
+            if (PullCommand(_ss.scanID, request, response, OW_RETURN_RESPONSE)) {
+                _ss.scanTimeOut = 0;
+                _foundESCs[_ss.scanID].firmWareVersion = response[0];
+                _foundESCs[_ss.scanID].firmWareSubVersion = response[1];
+                _ss.delayLoops = 1;
+                _ss.scanState++;
             } else {
-                scanTimeOut++;
+                _ss.scanTimeOut++;
             }
             break;
         case 3:request[0] = OW_REQ_SN;
-            if (PullCommand(scanID, request, response, OW_RETURN_RESPONSE)) {
-                scanTimeOut = 0;
+            if (PullCommand(_ss.scanID, request, response, OW_RETURN_RESPONSE)) {
+                _ss.scanTimeOut = 0;
                 for (uint8_t i = 0; i < 12; i++) {
-                    _foundESCs[scanID].serialNumber[i] = response[i];
+                    _foundESCs[_ss.scanID].serialNumber[i] = response[i];
                 }
-                delayLoops = 1;
-                return scanID + 1;
+                _ss.delayLoops = 1;
+                return _ss.scanID + 1;
             } else {
-                scanTimeOut++;
+                _ss.scanTimeOut++;
             }
             break;
         }
     } else {
         PullReset();
-        return scanID + 1;
+        return _ss.scanID + 1;
     }
-    return scanID;
+    return _ss.scanID;
 }
 
 /*
@@ -536,34 +532,28 @@ uint8_t AP_FETtecOneWire::ScanESCs()
 */
 uint8_t AP_FETtecOneWire::InitESCs()
 {
-    static uint8_t delayLoops = 0;
-    static uint8_t activeID = 1;
-    static uint8_t State = 0;
-    static uint8_t TimeOut = 0;
-    static uint8_t wakeFromBL = 1;
-    static uint8_t setFastCommand[4] = {OW_SET_FAST_COM_LENGTH, 0, 0, 0};
     uint8_t response[18] = {0};
     uint8_t request[1] = {0};
     if (_SetupActive == 0) {
-        delayLoops = 0;
-        activeID = 1;
-        State = 0;
-        TimeOut = 0;
-        wakeFromBL = 1;
+        _is.delayLoops = 0;
+        _is.activeID = 1;
+        _is.State = 0;
+        _is.TimeOut = 0;
+        _is.wakeFromBL = 1;
         return _SetupActive + 1;
     }
     while (_activeESC_IDs[_SetupActive] == 0 && _SetupActive < MAX_SUPPORTED_CH) {
         _SetupActive++;
     }
 
-    if (_SetupActive == MAX_SUPPORTED_CH && wakeFromBL == 0) {
+    if (_SetupActive == MAX_SUPPORTED_CH && _is.wakeFromBL == 0) {
         return _SetupActive;
-    } else if (_SetupActive == MAX_SUPPORTED_CH && wakeFromBL) {
-        wakeFromBL = 0;
-        activeID = 1;
+    } else if (_SetupActive == MAX_SUPPORTED_CH && _is.wakeFromBL) {
+        _is.wakeFromBL = 0;
+        _is.activeID = 1;
         _SetupActive = 1;
-        State = 0;
-        TimeOut = 0;
+        _is.State = 0;
+        _is.TimeOut = 0;
 
         _minID = MAX_SUPPORTED_CH;
         _maxID = 0;
@@ -582,8 +572,8 @@ uint8_t AP_FETtecOneWire::InitESCs()
 
         if (_IDcount == 0
                 || _maxID - _minID > _IDcount - 1) { // loop forever
-            wakeFromBL = 1;
-            return activeID;
+            _is.wakeFromBL = 1;
+            return _is.activeID;
         }
         _FastThrottleByteCount = 1;
         int8_t bitCount = 12 + (_IDcount * 11);
@@ -591,68 +581,68 @@ uint8_t AP_FETtecOneWire::InitESCs()
             _FastThrottleByteCount++;
             bitCount -= 8;
         }
-        setFastCommand[1] = _FastThrottleByteCount; // just for older ESC FW versions since 1.0 001 this byte is ignored as the ESC calculates it itself
-        setFastCommand[2] = _minID;                 // min ESC id
-        setFastCommand[3] = _IDcount;               // count of ESCs that will get signals
+        _is.setFastCommand[1] = _FastThrottleByteCount; // just for older ESC FW versions since 1.0 001 this byte is ignored as the ESC calculates it itself
+        _is.setFastCommand[2] = _minID;                 // min ESC id
+        _is.setFastCommand[3] = _IDcount;               // count of ESCs that will get signals
     }
 
-    if (delayLoops > 0) {
-        delayLoops--;
+    if (_is.delayLoops > 0) {
+        _is.delayLoops--;
         return _SetupActive;
     }
 
-    if (activeID < _SetupActive) {
-        activeID = _SetupActive;
-        State = 0;
-        TimeOut = 0;
+    if (_is.activeID < _SetupActive) {
+        _is.activeID = _SetupActive;
+        _is.State = 0;
+        _is.TimeOut = 0;
     }
 
-    if (TimeOut == 3 || TimeOut == 6 || TimeOut == 9 || TimeOut == 12) {
+    if (_is.TimeOut == 3 || _is.TimeOut == 6 || _is.TimeOut == 9 || _is.TimeOut == 12) {
         PullReset();
     }
 
-    if (TimeOut < 15) {
-        if (wakeFromBL) {
-            switch (State) {
+    if (_is.TimeOut < 15) {
+        if (_is.wakeFromBL) {
+            switch (_is.State) {
             case 0:request[0] = OW_BL_START_FW;
-                if (_foundESCs[activeID].inBootLoader == 1) {
-                    Transmit(activeID, request, FETtecOneWire_RequestLength[request[0]]);
-                    delayLoops = 5;
+                if (_foundESCs[_is.activeID].inBootLoader == 1) {
+                    Transmit(_is.activeID, request, FETtecOneWire_RequestLength[request[0]]);
+                    _is.delayLoops = 5;
                 } else {
-                    return activeID + 1;
+                    return _is.activeID + 1;
                 }
-                State = 1;
+                _is.State = 1;
                 break;
             case 1:request[0] = OW_OK;
-                if (PullCommand(activeID, request, response, OW_RETURN_FULL_FRAME)) {
-                    TimeOut = 0;
+                if (PullCommand(_is.activeID, request, response, OW_RETURN_FULL_FRAME)) {
+                    _is.TimeOut = 0;
                     if (response[0] == 0x02) {
-                        _foundESCs[activeID].inBootLoader = 1;
-                        State = 0;
+                        _foundESCs[_is.activeID].inBootLoader = 1;
+                        _is.State = 0;
                     } else {
-                        _foundESCs[activeID].inBootLoader = 0;
-                        delayLoops = 1;
-                        return activeID + 1;
+                        _foundESCs[_is.activeID].inBootLoader = 0;
+                        _is.delayLoops = 1;
+                        return _is.activeID + 1;
                     }
                 } else {
-                    TimeOut++;
+                    _is.TimeOut++;
                 }
                 break;
             }
         } else {
-            if (PullCommand(activeID, setFastCommand, response, OW_RETURN_RESPONSE)) {
-                TimeOut = 0;
-                delayLoops = 1;
-                return activeID + 1;
+            if (PullCommand(_is.activeID, _is.setFastCommand, response, OW_RETURN_RESPONSE)) {
+                _is.TimeOut = 0;
+                _is.delayLoops = 1;
+                return _is.activeID + 1;
             } else {
-                TimeOut++;
+                _is.TimeOut++;
             }
         }
     } else {
         PullReset();
-        return activeID + 1;
+        return _is.activeID + 1;
     }
-    return activeID;
+    return _is.activeID;
 }
 
 /*

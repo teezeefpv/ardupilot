@@ -255,6 +255,27 @@ private:
       OW_TLM_DEBUG2,
       OW_TLM_DEBUG3
     };
+
+    // presistent scan state data
+    struct scan_state
+    {
+      uint16_t delayLoops = 500;
+      uint8_t scanID = 0;
+      uint8_t scanState = 0;
+      uint8_t scanTimeOut = 0;
+    } _ss;
+
+    // presistent init state data
+    struct init_state
+    {
+      uint8_t delayLoops = 0;
+      uint8_t activeID = 1;
+      uint8_t State = 0;
+      uint8_t TimeOut = 0;
+      uint8_t wakeFromBL = 1;
+      uint8_t setFastCommand[4] = {OW_SET_FAST_COM_LENGTH, 0, 0, 0};
+    } _is;
+
 };
 #endif // HAL_AP_FETTECONEWIRE_ENABLED
 
