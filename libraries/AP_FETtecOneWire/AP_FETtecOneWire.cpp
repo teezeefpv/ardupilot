@@ -406,44 +406,6 @@ uint8_t AP_FETtecOneWire::Receive(uint8_t* Bytes, uint8_t Length, uint8_t return
 }
 
 /*
-    makes all connected ESCs beep
-    @param beepFreqency a 8 bit value from 0-255. higher make a higher beep
-*/
-void AP_FETtecOneWire::Beep(uint8_t beepFreqency)
-{
-    if (_IDcount > 0) {
-        uint8_t request[2] = {OW_BEEP, beepFreqency};
-        uint8_t spacer[2] = {0, 0};
-        for (uint8_t i = _minID; i < _maxID + 1; i++) {
-            Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
-            // add two zeros to make sure all ESCs can catch their command as we don't wait for a response here
-            _uart->write(spacer, 2);
-            _IgnoreOwnBytes += 2;
-        }
-    }
-}
-
-/*
-    sets the racewire color for all ESCs
-    @param R red brightness
-    @param G green brightness
-    @param B blue brightness
-*/
-void AP_FETtecOneWire::RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B)
-{
-    if (_IDcount > 0) {
-        uint8_t request[4] = {OW_SET_LED_TMP_COLOR, R, G, B};
-        uint8_t spacer[2] = {0, 0};
-        for (uint8_t i = _minID; i < _maxID + 1; i++) {
-            Transmit(i, request, FETtecOneWire_RequestLength[request[0]]);
-            // add two zeros to make sure all ESCs can catch their command as we don't wait for a response here
-            _uart->write(spacer, 2);
-            _IgnoreOwnBytes += 2;
-        }
-    }
-}
-
-/*
     Resets a pending pull request
     returns nothing
 */

@@ -107,18 +107,6 @@ private:
     uint8_t Receive(uint8_t *Bytes, uint8_t Length, uint8_t returnFullFrame);
 
 /*
-    makes all connected ESCs beep
-    beepFreqency = a 8 bit value from 0-255. higher make a higher beep
-*/
-    void Beep(uint8_t beepFreqency);
-
-/*
-    sets the racewire color for all ESCs
-    R, G, B = 8bit colors
-*/
-    void RW_LEDcolor(uint8_t R, uint8_t G, uint8_t B);
-
-/*
     Resets a pending pull request
     returns nothing
 */
