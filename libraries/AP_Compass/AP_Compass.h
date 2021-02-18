@@ -8,6 +8,8 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_Param/AP_Param.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
+#include <AP_MSP/msp.h>
+#include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 
 #include "AP_Compass_Backend.h"
 #include "Compass_PerMotor.h"
@@ -345,6 +347,17 @@ public:
     MAV_RESULT mag_cal_fixed_yaw(float yaw_deg, uint8_t compass_mask,
                                  float lat_deg, float lon_deg);
 
+#if HAL_MSP_COMPASS_ENABLED
+    void handle_msp(const MSP::msp_compass_data_message_t &pkt);
+#endif
+
+#if HAL_EXTERNAL_AHRS_ENABLED
+    void handle_external(const AP_ExternalAHRS::mag_data_message_t &pkt);
+#endif
+
+    // force save of current calibration as valid
+    void force_save_calibration(void);
+
 private:
     static Compass *_singleton;
 
@@ -376,7 +389,7 @@ private:
     uint8_t _get_cal_mask();
     bool _start_calibration(uint8_t i, bool retry=false, float delay_sec=0.0f);
     bool _start_calibration_mask(uint8_t mask, bool retry=false, bool autosave=false, float delay_sec=0.0f, bool autoreboot=false);
-    bool _auto_reboot() { return _compass_cal_autoreboot; }
+    bool _auto_reboot() const { return _compass_cal_autoreboot; }
     Priority next_cal_progress_idx[MAVLINK_COMM_NUM_BUFFERS];
     Priority next_cal_report_idx[MAVLINK_COMM_NUM_BUFFERS];
 
@@ -387,7 +400,7 @@ private:
       get mag field with the effects of offsets, diagonals and
       off-diagonals removed
     */
-    bool get_uncorrected_field(uint8_t instance, Vector3f &field);
+    bool get_uncorrected_field(uint8_t instance, Vector3f &field) const;
     
 #if COMPASS_CAL_ENABLED
     //keep track of which calibrators have been saved
@@ -416,8 +429,10 @@ private:
         DRIVER_QMC5883L =12,
         DRIVER_SITL     =13,
         DRIVER_MAG3110  =14,
-        DRIVER_IST8308  = 15,
+        DRIVER_IST8308  =15,
 		DRIVER_RM3100   =16,
+        DRIVER_MSP      =17,
+        DRIVER_SERIAL   =18,
     };
 
     bool _driver_enabled(enum DriverType driver_type);
@@ -489,7 +504,9 @@ private:
         // saved to eeprom when offsets are saved allowing ram &
         // eeprom values to be compared as consistency check
         AP_Int32    dev_id;
+        // Initialised when compass is detected
         int32_t detected_dev_id;
+        // Initialised at boot from saved devid
         int32_t expected_dev_id;
 
         // factors multiplied by throttle and added to compass outputs
@@ -528,11 +545,21 @@ private:
     void _detect_runtime(void);
     // This method reorganises devid list to match
     // priority list, only call before detection at boot
+#if COMPASS_MAX_INSTANCES > 1
     void _reorder_compass_params();
+#endif
     // Update Priority List for Mags, by default, we just
     // load them as they come up the first time
     Priority _update_priority_list(int32_t dev_id);
     
+    // method to check if the mag with the devid 
+    // is a replacement mag
+    bool is_replacement_mag(uint32_t dev_id);
+
+    //remove the devid from unreg compass list
+    void remove_unreg_dev_id(uint32_t devid);
+
+    void _reset_compass_id();
     //Create Arrays to be accessible by Priority only
     RestrictIDTypeArray<AP_Int8, COMPASS_MAX_INSTANCES, Priority> _use_for_yaw;
 #if COMPASS_MAX_INSTANCES > 1
@@ -568,6 +595,7 @@ private:
 #if COMPASS_MAX_UNREG_DEV
     // Put extra dev ids detected
     AP_Int32 extra_dev_id[COMPASS_MAX_UNREG_DEV];
+    uint32_t _previously_unreg_mag[COMPASS_MAX_UNREG_DEV];
 #endif
 
     AP_Int8 _filter_range;
@@ -584,6 +612,11 @@ private:
     bool _initial_location_set;
 
     bool _cal_thread_started;
+
+#if HAL_MSP_COMPASS_ENABLED
+    uint8_t msp_instance_mask;
+#endif
+    bool init_done;
 };
 
 namespace AP {

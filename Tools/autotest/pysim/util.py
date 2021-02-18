@@ -260,7 +260,6 @@ def start_SITL(binary,
                gdbserver=False,
                breakpoints=[],
                disable_breakpoints=False,
-               vicon=False,
                customisations=[],
                lldb=False):
 
@@ -299,6 +298,7 @@ def start_SITL(binary,
                     'bash -c "gdb -x /tmp/x.gdb"')
     elif gdb:
         f = open("/tmp/x.gdb", "w")
+        f.write("set pagination off\n")
         for breakpoint in breakpoints:
             f.write("b %s\n" % (breakpoint,))
         if disable_breakpoints:
@@ -344,13 +344,16 @@ def start_SITL(binary,
         cmd.extend(['--speedup', str(speedup)])
     if defaults_filepath is not None:
         if type(defaults_filepath) == list:
-            defaults_filepath = ",".join(defaults_filepath)
-        cmd.extend(['--defaults', defaults_filepath])
+            if len(defaults_filepath):
+                cmd.extend(['--defaults', ",".join(defaults_filepath)])
+        else:
+            cmd.extend(['--defaults', defaults_filepath])
     if unhide_parameters:
         cmd.extend(['--unhide-groups'])
-    if vicon:
-        cmd.extend(["--uartF=sim:vicon:"])
     cmd.extend(customisations)
+
+    # somewhere for MAVProxy to connect to:
+    cmd.append('--uartC=tcp:2')
 
     if (gdb or lldb) and sys.platform == "darwin" and os.getenv('DISPLAY'):
         global windowID
@@ -410,7 +413,7 @@ def start_SITL(binary,
         # TODO: have a SITL-compiled ardupilot able to have its
         # console on an output fd.
     else:
-        child.expect('Waiting for connection', timeout=300)
+        child.expect('Waiting for ', timeout=300)
     return child
 
 
@@ -428,8 +431,13 @@ def MAVProxy_version():
         raise ValueError("Unable to determine MAVProxy version from (%s)" % output)
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
-def start_MAVProxy_SITL(atype, aircraft=None, setup=False, master='tcp:127.0.0.1:5760',
-                        options=[], logfile=sys.stdout):
+def start_MAVProxy_SITL(atype,
+                        aircraft=None,
+                        setup=False,
+                        master='tcp:127.0.0.1:5762',
+                        options=[],
+                        pexpect_timeout=60,
+                        logfile=sys.stdout):
     """Launch mavproxy connected to a SITL instance."""
     local_mp_modules_dir = os.path.abspath(
         os.path.join(__file__, '..', '..', '..', 'mavproxy_modules'))
@@ -444,7 +452,6 @@ def start_MAVProxy_SITL(atype, aircraft=None, setup=False, master='tcp:127.0.0.1
     cmd = []
     cmd.append(mavproxy_cmd())
     cmd.extend(['--master', master])
-    cmd.extend(['--out', '127.0.0.1:14550'])
     if setup:
         cmd.append('--setup')
     if aircraft is None:
@@ -456,7 +463,7 @@ def start_MAVProxy_SITL(atype, aircraft=None, setup=False, master='tcp:127.0.0.1
     print("PYTHONPATH: %s" % str(env['PYTHONPATH']))
     print("Running: %s" % cmd_as_shell(cmd))
 
-    ret = pexpect.spawn(cmd[0], cmd[1:], logfile=logfile, encoding=ENCODING, timeout=60, env=env)
+    ret = pexpect.spawn(cmd[0], cmd[1:], logfile=logfile, encoding=ENCODING, timeout=pexpect_timeout, env=env)
     ret.delaybeforesend = 0
     pexpect_autoclose(ret)
     return ret
@@ -759,6 +766,19 @@ def constrain(value, minv, maxv):
     if value > maxv:
         value = maxv
     return value
+
+def load_local_module(fname):
+    '''load a python module from within the ardupilot tree'''
+    fname = os.path.join(topdir(), fname)
+    if sys.version_info.major >= 3:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("local_module", fname)
+        ret = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ret)
+    else:
+        import imp
+        ret = imp.load_source("local_module", fname)
+    return ret
 
 
 if __name__ == "__main__":

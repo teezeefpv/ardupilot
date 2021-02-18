@@ -66,7 +66,7 @@ void Sub::read_rangefinder()
 }
 
 // return true if rangefinder_alt can be used
-bool Sub::rangefinder_alt_ok()
+bool Sub::rangefinder_alt_ok() const
 {
     return (rangefinder_state.enabled && rangefinder_state.alt_healthy);
 }
@@ -106,4 +106,12 @@ void Sub::accel_cal_update()
     if (ins.get_new_trim(trim_roll, trim_pitch)) {
         ahrs.set_trim(Vector3f(trim_roll, trim_pitch, 0));
     }
+}
+
+/*
+  ask airspeed sensor for a new value, duplicated from plane
+ */
+void Sub::read_airspeed()
+{
+    g2.airspeed.update(should_log(MASK_LOG_IMU));
 }

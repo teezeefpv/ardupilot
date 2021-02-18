@@ -33,8 +33,9 @@ void Plane::init_ardupilot()
 
     // setup any board specific drivers
     BoardConfig.init();
-#if HAL_WITH_UAVCAN
-    BoardConfig_CAN.init();
+
+#if HAL_MAX_CAN_PROTOCOL_DRIVERS
+    can_mgr.init();
 #endif
 
     // initialise rc channels including setting mode
@@ -69,6 +70,7 @@ void Plane::init_ardupilot()
     // setup telem slots with serial ports
     gcs().setup_uarts();
 
+
 #if OSD_ENABLED == ENABLED
     osd.init();
 #endif
@@ -95,16 +97,13 @@ void Plane::init_ardupilot()
     g2.efi.init();
 #endif
 
-    // give AHRS the airspeed sensor
-    ahrs.set_airspeed(&airspeed);
-
     // GPS Initialization
     gps.set_log_gps_bit(MASK_LOG_GPS);
     gps.init(serial_manager);
 
     init_rc_in();               // sets up rc channels from radio
 
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     // initialise camera mount
     camera_mount.init();
 #endif
@@ -138,7 +137,7 @@ void Plane::init_ardupilot()
     // choose the nav controller
     set_nav_controller();
 
-    set_mode_by_number((enum Mode::Number)g.initial_mode.get(), ModeReason::UNKNOWN);
+    set_mode_by_number((enum Mode::Number)g.initial_mode.get(), ModeReason::INITIALISED);
 
     // set the correct flight mode
     // ---------------------------
@@ -155,9 +154,6 @@ void Plane::init_ardupilot()
 #if GRIPPER_ENABLED == ENABLED
     g2.gripper.init();
 #endif
-
-    // disable safety if requested
-    BoardConfig.init_safety();
 }
 
 //********************************************************************************
@@ -165,7 +161,7 @@ void Plane::init_ardupilot()
 //********************************************************************************
 void Plane::startup_ground(void)
 {
-    set_mode(mode_initializing, ModeReason::UNKNOWN);
+    set_mode(mode_initializing, ModeReason::INITIALISED);
 
 #if (GROUND_START_DELAY > 0)
     gcs().send_text(MAV_SEVERITY_NOTICE,"Ground start with delay");
@@ -205,8 +201,6 @@ void Plane::startup_ground(void)
     // mid-flight, so set the serial ports non-blocking once we are
     // ready to fly
     serial_manager.set_blocking_writes_all(false);
-
-    gcs().send_text(MAV_SEVERITY_INFO,"Ground start complete");
 }
 
 
@@ -228,13 +222,12 @@ bool Plane::set_mode(Mode &new_mode, const ModeReason reason)
     // backup current control_mode and previous_mode
     Mode &old_previous_mode = *previous_mode;
     Mode &old_mode = *control_mode;
-    const ModeReason previous_mode_reason_backup = previous_mode_reason;
 
     // update control_mode assuming success
     // TODO: move these to be after enter() once start_command_callback() no longer checks control_mode
     previous_mode = control_mode;
     control_mode = &new_mode;
-    previous_mode_reason = control_mode_reason;
+    const ModeReason previous_mode_reason = control_mode_reason;
     control_mode_reason = reason;
 
     // attempt to enter new mode
@@ -247,7 +240,6 @@ bool Plane::set_mode(Mode &new_mode, const ModeReason reason)
         control_mode = &old_mode;
 
         control_mode_reason = previous_mode_reason;
-        previous_mode_reason = previous_mode_reason_backup;
 
         // currently, only Q modes can fail enter(). This will likely change in the future and all modes
         // should be changed to check dependencies and fail early before depending on changes in Mode::set_mode()
@@ -267,7 +259,6 @@ bool Plane::set_mode(Mode &new_mode, const ModeReason reason)
     old_mode.exit();
 
     // record reasons
-    previous_mode_reason = control_mode_reason;
     control_mode_reason = reason;
 
     // log and notify mode change
@@ -403,7 +394,7 @@ void Plane::startup_INS_ground(void)
         // --------------------------
         airspeed.calibrate(true);
     } else {
-        gcs().send_text(MAV_SEVERITY_WARNING,"No airspeed");
+        gcs().send_text(MAV_SEVERITY_WARNING,"No airspeed sensor present");
     }
 }
 
@@ -431,7 +422,7 @@ bool Plane::should_log(uint32_t mask)
  */
 int8_t Plane::throttle_percentage(void)
 {
-    if (quadplane.in_vtol_mode()) {
+    if (quadplane.in_vtol_mode() && !quadplane.in_tailsitter_vtol_transition()) {
         return quadplane.throttle_percentage();
     }
     float throttle = SRV_Channels::get_output_scaled(SRV_Channel::k_throttle);

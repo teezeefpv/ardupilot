@@ -26,7 +26,7 @@ public:
         //
         k_param_format_version = 0,
         k_param_software_type, // unused
-        k_param_BoardConfig_CAN,
+        k_param_can_mgr,
 
         // Misc
         //
@@ -81,6 +81,9 @@ public:
         k_param_cli_enabled_old,    // unused
         k_param_gcs3,
         k_param_gcs_pid_mask,
+        k_param_gcs4,
+        k_param_gcs5,
+        k_param_gcs6,
 
         //
         // 130: Sensor parameters

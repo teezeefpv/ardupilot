@@ -34,7 +34,7 @@
 #endif
 
 #ifndef HAL_STORAGE_SIZE
-#define HAL_STORAGE_SIZE            16384
+#define HAL_STORAGE_SIZE            32768
 #endif
 
 #define HAL_STORAGE_SIZE_AVAILABLE  HAL_STORAGE_SIZE
@@ -57,6 +57,13 @@
 // allow for static semaphores
 #include <AP_HAL_SITL/Semaphores.h>
 #define HAL_Semaphore HALSITL::Semaphore
+
+#include <AP_HAL/EventHandle.h>
+#define HAL_EventHandle AP_HAL::EventHandle
+
+#ifndef HAL_NUM_CAN_IFACES
+#define HAL_NUM_CAN_IFACES 0
+#endif
 
 #ifndef HAL_BOARD_STORAGE_DIRECTORY
 #define HAL_BOARD_STORAGE_DIRECTORY "."

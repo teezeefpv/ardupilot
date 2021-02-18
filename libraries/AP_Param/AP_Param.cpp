@@ -32,7 +32,11 @@
 #include <GCS_MAVLink/GCS.h>
 #include <StorageManager/StorageManager.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
+#include <AP_InternalError/AP_InternalError.h>
 #include <stdio.h>
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    #include <SITL/SITL.h>
+#endif
 
 extern const AP_HAL::HAL &hal;
 
@@ -107,6 +111,9 @@ const AP_Param::param_defaults_struct AP_Param::param_defaults_data = {
 // storage object
 StorageAccess AP_Param::_storage(StorageManager::StorageParam);
 
+// backup storage object
+StorageAccess AP_Param::_storage_bak(StorageManager::StorageParamBak);
+
 // flags indicating frame type
 uint16_t AP_Param::_frame_type_flags;
 
@@ -114,6 +121,7 @@ uint16_t AP_Param::_frame_type_flags;
 void AP_Param::eeprom_write_check(const void *ptr, uint16_t ofs, uint8_t size)
 {
     _storage.write_block(ofs, ptr, size);
+    _storage_bak.write_block(ofs, ptr, size);
 }
 
 bool AP_Param::_hide_disabled_groups = true;
@@ -155,7 +163,7 @@ void AP_Param::erase_all(void)
 */
 uint32_t AP_Param::group_id(const struct GroupInfo *grpinfo, uint32_t base, uint8_t i, uint8_t shift)
 {
-    if (grpinfo[i].idx == 0 && shift != 0 && !(grpinfo[i].flags & AP_PARAM_NO_SHIFT)) {
+    if (grpinfo[i].idx == 0 && shift != 0 && !(grpinfo[i].flags & AP_PARAM_FLAG_NO_SHIFT)) {
         /*
           this is a special case for a bug in the original design. An
           idx of 0 shifted by n bits is still zero, which makes it
@@ -199,7 +207,7 @@ bool AP_Param::check_group_info(const struct AP_Param::GroupInfo *  group_info,
             return false;
         }
         if (group_shift != 0 && idx == 0) {
-            // great idx 0 as 63 for duplicates. See group_id()
+            // treat idx 0 as 63 for duplicates. See group_id()
             idx = 63;
         }
         if (used_mask & (1ULL<<idx)) {
@@ -320,18 +328,31 @@ bool AP_Param::check_var_info(void)
 // setup the _var_info[] table
 bool AP_Param::setup(void)
 {
-    struct EEPROM_header hdr;
+    struct EEPROM_header hdr {};
+    struct EEPROM_header hdr2 {};
 
     // check the header
     _storage.read_block(&hdr, 0, sizeof(hdr));
+    _storage_bak.read_block(&hdr2, 0, sizeof(hdr2));
     if (hdr.magic[0] != k_EEPROM_magic0 ||
         hdr.magic[1] != k_EEPROM_magic1 ||
         hdr.revision != k_EEPROM_revision) {
+        if (hdr2.magic[0] == k_EEPROM_magic0 &&
+            hdr2.magic[1] == k_EEPROM_magic1 &&
+            hdr2.revision == k_EEPROM_revision &&
+            _storage.copy_area(_storage_bak)) {
+            // restored from backup
+            INTERNAL_ERROR(AP_InternalError::error_t::params_restored);
+            return true;
+        }
         // header doesn't match. We can't recover any variables. Wipe
         // the header and setup the sentinal directly after the header
         Debug("bad header in setup - erasing");
         erase_all();
     }
+
+    // ensure that backup is in sync with primary
+    _storage_bak.copy_area(_storage);
 
     return true;
 }
@@ -909,6 +930,26 @@ AP_Param::find_by_index(uint16_t idx, enum ap_var_type *ptype, ParamToken *token
     return ap;    
 }
 
+// by-name equivalent of find_by_index()
+AP_Param* AP_Param::find_by_name(const char* name, enum ap_var_type *ptype, ParamToken *token)
+{
+    AP_Param *ap;
+    uint16_t count = 0;
+    for (ap = AP_Param::first(token, ptype);
+         ap && *ptype != AP_PARAM_GROUP && *ptype != AP_PARAM_NONE;
+         ap = AP_Param::next_scalar(token, ptype)) {
+        int32_t ret = strncasecmp(name, _var_info[token->key].name, AP_MAX_NAME_SIZE);
+        if (ret >= 0) {
+            char buf[AP_MAX_NAME_SIZE];
+            ap->copy_name_token(*token, buf, AP_MAX_NAME_SIZE);
+            if (strncasecmp(name, buf, AP_MAX_NAME_SIZE) == 0) {
+                break;
+            }
+        }
+        count++;
+    }
+    return ap;
+}
 
 /*
   Find a variable by pointer, returning key. This is used for loading pointer variables
@@ -1137,12 +1178,21 @@ void AP_Param::save_sync(bool force_save)
 */
 void AP_Param::save(bool force_save)
 {
-    struct param_save p;
+    struct param_save p, p2;
     p.param = this;
     p.force_save = force_save;
+    if (save_queue.peek(p2) &&
+        p2.param == this &&
+        p2.force_save == force_save) {
+        // this one is already at the head of the list to be
+        // saved. This check is cheap and catches the case where we
+        // are flooding the save queue with one parameter (eg. mission
+        // creation, changing MIS_TOTAL)
+        return;
+    }
     while (!save_queue.push(p)) {
         // if we can't save to the queue
-        if (hal.util->get_soft_armed()) {
+        if (hal.util->get_soft_armed() || !hal.scheduler->in_main_thread()) {
             // if we are armed then don't sleep, instead we lose the
             // parameter save
             return;
@@ -1164,6 +1214,10 @@ void AP_Param::save_io_handler(void)
     struct param_save p;
     while (save_queue.pop(p)) {
         p.param->save_sync(p.force_save);
+    }
+    if (hal.scheduler->is_system_initialized()) {
+        // pay the cost of parameter counting in the IO thread
+        count_parameters();
     }
 }
 
@@ -1466,6 +1520,9 @@ void AP_Param::reload_defaults_file(bool last_pass)
         }
     }
 #endif
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !defined(HAL_BUILD_AP_PERIPH)
+    hal.util->set_cmdline_parameters();
+#endif
 }
 
 
@@ -1478,9 +1535,6 @@ void AP_Param::load_object_from_eeprom(const void *object_pointer, const struct 
     struct Param_header phdr;
     uint16_t key;
 
-    // reset cached param counter as we may be loading a dynamic var_info
-    invalidate_count();
-    
     if (!find_key_by_pointer(object_pointer, key)) {
         hal.console->printf("ERROR: Unable to find param pointer\n");
         return;
@@ -1522,6 +1576,9 @@ void AP_Param::load_object_from_eeprom(const void *object_pointer, const struct 
             ofs += type_size((enum ap_var_type)phdr.type) + sizeof(phdr);
         }
     }
+
+    // reset cached param counter as we may be loading a dynamic var_info
+    invalidate_count();
 }
 
 
@@ -1547,13 +1604,14 @@ AP_Param *AP_Param::first(ParamToken *token, enum ap_var_type *ptype)
 
 /// Returns the next variable in a group, recursing into groups
 /// as needed
-AP_Param *AP_Param::next_group(uint16_t vindex, const struct GroupInfo *group_info,
+AP_Param *AP_Param::next_group(const uint16_t vindex, const struct GroupInfo *group_info,
                                bool *found_current,
-                               uint32_t group_base,
-                               uint8_t group_shift,
-                               ptrdiff_t group_offset,
+                               const uint32_t group_base,
+                               const uint8_t group_shift,
+                               const ptrdiff_t group_offset,
                                ParamToken *token,
-                               enum ap_var_type *ptype)
+                               enum ap_var_type *ptype,
+                               bool skip_disabled)
 {
     enum ap_var_type type;
     for (uint8_t i=0;
@@ -1576,7 +1634,7 @@ AP_Param *AP_Param::next_group(uint16_t vindex, const struct GroupInfo *group_in
             }
 
             ap = next_group(vindex, ginfo, found_current, group_id(group_info, group_base, i, group_shift),
-                            group_shift + _group_level_shift, new_offset, token, ptype);
+                            group_shift + _group_level_shift, new_offset, token, ptype, skip_disabled);
             if (ap != nullptr) {
                 return ap;
             }
@@ -1593,10 +1651,24 @@ AP_Param *AP_Param::next_group(uint16_t vindex, const struct GroupInfo *group_in
                 if (!get_base(_var_info[vindex], base)) {
                     continue;
                 }
-                return (AP_Param*)(base + group_info[i].offset + group_offset);
+
+                AP_Param *ret = (AP_Param*)(base + group_info[i].offset + group_offset);
+
+                if (skip_disabled &&
+                    _hide_disabled_groups &&
+                    group_info[i].type == AP_PARAM_INT8 &&
+                    (group_info[i].flags & AP_PARAM_FLAG_ENABLE) &&
+                    ((AP_Int8 *)ret)->get() == 0) {
+                    token->last_disabled = 1;
+                }
+                return ret;
             }
             if (group_id(group_info, group_base, i, group_shift) == token->group_element) {
                 *found_current = true;
+                if (token->last_disabled) {
+                    token->last_disabled = 0;
+                    return nullptr;
+                }
                 if (type == AP_PARAM_VECTOR3F && token->idx < 3) {
                     // return the next element of the vector as a
                     // float
@@ -1620,7 +1692,7 @@ AP_Param *AP_Param::next_group(uint16_t vindex, const struct GroupInfo *group_in
 
 /// Returns the next variable in _var_info, recursing into groups
 /// as needed
-AP_Param *AP_Param::next(ParamToken *token, enum ap_var_type *ptype)
+AP_Param *AP_Param::next(ParamToken *token, enum ap_var_type *ptype, bool skip_disabled)
 {
     uint16_t i = token->key;
     bool found_current = false;
@@ -1654,7 +1726,7 @@ AP_Param *AP_Param::next(ParamToken *token, enum ap_var_type *ptype)
             if (group_info == nullptr) {
                 continue;
             }
-            AP_Param *ap = next_group(i, group_info, &found_current, 0, 0, 0, token, ptype);
+            AP_Param *ap = next_group(i, group_info, &found_current, 0, 0, 0, token, ptype, skip_disabled);
             if (ap != nullptr) {
                 return ap;
             }
@@ -1678,47 +1750,12 @@ AP_Param *AP_Param::next_scalar(ParamToken *token, enum ap_var_type *ptype)
 {
     AP_Param *ap;
     enum ap_var_type type;
-    while ((ap = next(token, &type)) != nullptr && type > AP_PARAM_FLOAT) ;
+    while ((ap = next(token, &type, true)) != nullptr && type > AP_PARAM_FLOAT) ;
 
-    if (ap != nullptr && type == AP_PARAM_INT8) {
-        /* 
-           check if this is an enable variable. To do that we need to
-           find the info structures for the variable
-         */
-        uint32_t group_element;
-        const struct GroupInfo *ginfo;
-        struct GroupNesting group_nesting {};
-        uint8_t idx;
-        const struct AP_Param::Info *info = ap->find_var_info_token(*token, &group_element,
-                                                                    ginfo, group_nesting, &idx);
-        if (info && ginfo &&
-            (ginfo->flags & AP_PARAM_FLAG_ENABLE) &&
-            ((AP_Int8 *)ap)->get() == 0 &&
-            _hide_disabled_groups) {
-            /*
-              this is a disabled parameter tree, include this
-              parameter but not others below it. We need to keep
-              looking until we go past the parameters in this object
-            */
-            ParamToken token2 = *token;
-            enum ap_var_type type2;
-            AP_Param *ap2;
-            while ((ap2 = next(&token2, &type2)) != nullptr) {
-                if (token2.key != token->key) {
-                    break;
-                }
-                if (group_nesting.level != 0 && (token->group_element & 0x3F) != (token2.group_element & 0x3F)) {
-                    break;
-                }
-                // update the returned token so the next() call goes from this point
-                *token = token2;
-            }
-            
+    if (ap != nullptr) {
+        if (ptype != nullptr) {
+            *ptype = type;
         }
-    }
-
-    if (ap != nullptr && ptype != nullptr) {
-        *ptype = type;
     }
     return ap;
 }
@@ -1979,6 +2016,16 @@ bool AP_Param::parse_param_line(char *line, char **vname, float &value, bool &re
     if (strlen(pname) > AP_MAX_NAME_SIZE) {
         return false;
     }
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    // Workaround to prevent FORMAT_VERSION in param file resulting in invalid
+    // EEPROM. For details, see: https://github.com/ArduPilot/ardupilot/issues/15579
+    if (strcmp(pname, "FORMAT_VERSION") == 0) {
+        ::printf("Warning: Ignoring FORMAT_VERSION in param file\n");
+        return false;
+    }
+#endif
+
     const char *value_s = strtok_r(nullptr, ", =\t\r\n", &saveptr);
     if (value_s == nullptr) {
         return false;
@@ -2342,7 +2389,7 @@ uint16_t AP_Param::count_parameters(void)
             _count_marker != _count_marker_done) &&
            limit--) {
         AP_Param  *vp;
-        AP_Param::ParamToken token;
+        AP_Param::ParamToken token {};
         uint16_t count = 0;
         uint16_t marker = _count_marker;
 
@@ -2556,7 +2603,7 @@ void AP_Param::show_all(AP_HAL::BetterStream *port, bool showKeyValues)
          ap;
          ap=AP_Param::next_scalar(&token, &type)) {
         if (showKeyValues) {
-            port->printf("Key %i: Index %i: GroupElement %i  :  ", token.key, token.idx, token.group_element);
+            port->printf("Key %u: Index %u: GroupElement %u  :  ", (unsigned)token.key, (unsigned)token.idx, (unsigned)token.group_element);
         }
         show(ap, token, type, port);
         hal.scheduler->delay(1);

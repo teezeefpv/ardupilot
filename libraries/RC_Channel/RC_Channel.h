@@ -4,6 +4,7 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
+#include <AP_Math/AP_Math.h>
 
 #define NUM_RC_CHANNELS 16
 
@@ -182,6 +183,17 @@ public:
         Q_ASSIST =            82, // disable, enable and force Q assist
         ZIGZAG_Auto =         83, // zigzag auto switch
         AIRMODE =             84, // enable / disable airmode for copter
+        GENERATOR   =         85, // generator control
+        TER_DISABLE =         86, // disable terrain following in CRUISE/FBWB modes
+        CROW_SELECT =         87, // select CROW mode for diff spoilers;high disables,mid forces progressive
+        SOARING =             88, // three-position switch to set soaring mode
+        LANDING_FLARE =       89, // force flare, throttle forced idle, pitch to LAND_PITCH_CD, tilts up
+        EKF_POS_SOURCE =      90, // change EKF position source between primary, secondary and tertiary sources
+        ARSPD_CALIBRATE=      91, // calibrate airspeed ratio 
+        FBWA =                92, // Fly-By-Wire-A
+        RELOCATE_MISSION =    93, // used in separate branch MISSION_RELATIVE
+        VTX_POWER =           94, // VTX power level
+
         // entries from 100 onwards are expected to be developer
         // options used for testing
         KILL_IMU1 =          100, // disable first IMU (for IMU failure testing)
@@ -194,8 +206,23 @@ public:
         // also, if you add an option >255, you will need to fix duplicate_options_exist
 
         // inputs from 200 will eventually used to replace RCMAP
+        ROLL =               201, // roll input
+        PITCH =              202, // pitch input
+        WALKING_HEIGHT =     203, // walking robot height input
         MAINSAIL =           207, // mainsail input
         FLAP =               208, // flap input
+        FWD_THR =            209, // VTOL manual forward throttle
+        AIRBRAKE =           210, // manual airbrake control
+
+        // inputs for the use of onboard lua scripting
+        SCRIPTING_1 =        300,
+        SCRIPTING_2 =        301,
+        SCRIPTING_3 =        302,
+        SCRIPTING_4 =        303,
+        SCRIPTING_5 =        304,
+        SCRIPTING_6 =        305,
+        SCRIPTING_7 =        306,
+        SCRIPTING_8 =        307,
     };
     typedef enum AUX_FUNC aux_func_t;
 
@@ -207,12 +234,32 @@ public:
     };
 
     bool read_3pos_switch(AuxSwitchPos &ret) const WARN_IF_UNUSED;
+    bool read_6pos_switch(int8_t& position) WARN_IF_UNUSED;
     AuxSwitchPos get_aux_switch_pos() const;
+
+    virtual void do_aux_function(aux_func_t ch_option, AuxSwitchPos);
+
+#if !HAL_MINIMIZE_FEATURES
+    const char *string_for_aux_function(AUX_FUNC function) const;
+#endif
+    // pwm value above which we condider that Radio min value is invalid
+    static const uint16_t RC_CALIB_MIN_LIMIT_PWM = 1300;
+    // pwm value under which we condider that Radio max value is invalid
+    static const uint16_t RC_CALIB_MAX_LIMIT_PWM = 1700;
+
+    // pwm value above which the switch/button will be invoked:
+    static const uint16_t AUX_SWITCH_PWM_TRIGGER_HIGH = 1800;
+    // pwm value below which the switch/button will be disabled:
+    static const uint16_t AUX_SWITCH_PWM_TRIGGER_LOW = 1200;
+
+    // pwm value above which the option will be invoked:
+    static const uint16_t AUX_PWM_TRIGGER_HIGH = 1700;
+    // pwm value below which the option will be disabled:
+    static const uint16_t AUX_PWM_TRIGGER_LOW = 1300;
 
 protected:
 
     virtual void init_aux_function(aux_func_t ch_option, AuxSwitchPos);
-    virtual void do_aux_function(aux_func_t ch_option, AuxSwitchPos);
 
     virtual void do_aux_function_armdisarm(const AuxSwitchPos ch_flag);
     void do_aux_function_avoid_adsb(const AuxSwitchPos ch_flag);
@@ -228,6 +275,7 @@ protected:
     void do_aux_function_rc_override_enable(const AuxSwitchPos ch_flag);
     void do_aux_function_relay(uint8_t relay, bool val);
     void do_aux_function_sprayer(const AuxSwitchPos ch_flag);
+    void do_aux_function_generator(const AuxSwitchPos ch_flag);
 
     typedef int8_t modeswitch_pos_t;
     virtual void mode_switch_changed(modeswitch_pos_t new_pos) {
@@ -263,11 +311,6 @@ private:
     int16_t pwm_to_angle() const;
     int16_t pwm_to_angle_dz(uint16_t dead_zone) const;
 
-    // pwm value above which the option will be invoked:
-    static const uint16_t AUX_PWM_TRIGGER_HIGH = 1800;
-    // pwm value below which the option will be disabled:
-    static const uint16_t AUX_PWM_TRIGGER_LOW = 1200;
-
     // Structure used to detect and debounce switch changes
     struct {
         int8_t debounce_position = -1;
@@ -287,7 +330,6 @@ private:
     };
 
     static const LookupTable lookuptable[];
-    const char *string_for_aux_function(AUX_FUNC function) const;
 #endif
 };
 
@@ -373,6 +415,11 @@ public:
         return get_singleton() != nullptr && (_options & uint32_t(Option::FPORT_PAD));
     }
 
+    // returns true if we should pass through data for crsf telemetry
+    bool crsf_custom_telemetry(void) const {
+        return get_singleton() != nullptr && (_options & uint32_t(Option::CRSF_CUSTOM_TELEMETRY));
+    }
+
     // should a channel reverse option affect aux switches
     bool switch_reverse_allowed(void) const {
         return get_singleton() != nullptr && (_options & uint32_t(Option::ALLOW_SWITCH_REV));
@@ -398,9 +445,26 @@ public:
         return _options & uint32_t(Option::ARMING_SKIP_CHECK_RPY);
     }
 
-    float override_timeout_ms() const {
-        return _override_timeout.get() * 1e3f;
+
+    // returns true if overrides should time out.  If true is returned
+    // then returned_timeout_ms will contain the timeout in
+    // milliseconds, with 0 meaning overrides are disabled.
+    bool get_override_timeout_ms(uint32_t &returned_timeout_ms) const {
+        const float value = _override_timeout.get();
+        if (is_positive(value)) {
+            returned_timeout_ms = uint32_t(value * 1e3f);
+            return true;
+        }
+        if (is_zero(value)) {
+            returned_timeout_ms = 0;
+            return true;
+        }
+        // overrides will not time out
+        return false;
     }
+
+    // get mask of enabled protocols
+    uint32_t enabled_protocols() const;
 
     // returns true if we have had a direct detach RC reciever, does not include overrides
     bool has_had_rc_receiver() const { return _has_had_rc_receiver; }
@@ -417,14 +481,15 @@ public:
 protected:
 
     enum class Option {
-        IGNORE_RECEIVER       = (1 << 0), // RC receiver modules
-        IGNORE_OVERRIDES      = (1 << 1), // MAVLink overrides
-        IGNORE_FAILSAFE       = (1 << 2), // ignore RC failsafe bits
-        FPORT_PAD             = (1 << 3), // pad fport telem output
-        LOG_DATA              = (1 << 4), // log rc input bytes
-        ARMING_CHECK_THROTTLE = (1 << 5), // run an arming check for neutral throttle
-        ARMING_SKIP_CHECK_RPY = (1 << 6), // skip the an arming checks for the roll/pitch/yaw channels
-        ALLOW_SWITCH_REV      = (1 << 7), // honor the reversed flag on switches
+        IGNORE_RECEIVER         = (1U << 0), // RC receiver modules
+        IGNORE_OVERRIDES        = (1U << 1), // MAVLink overrides
+        IGNORE_FAILSAFE         = (1U << 2), // ignore RC failsafe bits
+        FPORT_PAD               = (1U << 3), // pad fport telem output
+        LOG_DATA                = (1U << 4), // log rc input bytes
+        ARMING_CHECK_THROTTLE   = (1U << 5), // run an arming check for neutral throttle
+        ARMING_SKIP_CHECK_RPY   = (1U << 6), // skip the an arming checks for the roll/pitch/yaw channels
+        ALLOW_SWITCH_REV        = (1U << 7), // honor the reversed flag on switches
+        CRSF_CUSTOM_TELEMETRY   = (1U << 8), // use passthrough data for crsf telemetry
     };
 
     void new_override_received() {
@@ -442,6 +507,7 @@ private:
 
     AP_Float _override_timeout;
     AP_Int32  _options;
+    AP_Int32  _protocols;
 
     // flight_mode_channel_number must be overridden in vehicle specific code
     virtual int8_t flight_mode_channel_number() const = 0;

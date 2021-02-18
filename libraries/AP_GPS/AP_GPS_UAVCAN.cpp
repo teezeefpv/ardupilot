@@ -18,23 +18,25 @@
 //
 #include <AP_HAL/AP_HAL.h>
 
-#if HAL_WITH_UAVCAN
+#if HAL_ENABLE_LIBUAVCAN_DRIVERS
 #include "AP_GPS_UAVCAN.h"
 
-#include <AP_BoardConfig/AP_BoardConfig_CAN.h>
+#include <AP_CANManager/AP_CANManager.h>
 #include <AP_UAVCAN/AP_UAVCAN.h>
 
 #include <uavcan/equipment/gnss/Fix.hpp>
 #include <uavcan/equipment/gnss/Fix2.hpp>
 #include <uavcan/equipment/gnss/Auxiliary.hpp>
+#include <ardupilot/gnss/Heading.hpp>
 
 extern const AP_HAL::HAL& hal;
 
-#define debug_gps_uavcan(level_debug, can_driver, fmt, args...) do { if ((level_debug) <= AP::can().get_debug_level_driver(can_driver)) { printf(fmt, ##args); }} while (0)
+#define LOG_TAG "GPS"
 
 UC_REGISTRY_BINDER(FixCb, uavcan::equipment::gnss::Fix);
 UC_REGISTRY_BINDER(Fix2Cb, uavcan::equipment::gnss::Fix2);
 UC_REGISTRY_BINDER(AuxCb, uavcan::equipment::gnss::Auxiliary);
+UC_REGISTRY_BINDER(HeadingCb, ardupilot::gnss::Heading);
 
 AP_GPS_UAVCAN::DetectedModules AP_GPS_UAVCAN::_detected_modules[] = {0};
 HAL_Semaphore AP_GPS_UAVCAN::_sem_registry;
@@ -82,6 +84,14 @@ void AP_GPS_UAVCAN::subscribe_msgs(AP_UAVCAN* ap_uavcan)
         AP_HAL::panic("UAVCAN GNSS subscriber start problem\n\r");
         return;
     }
+
+    uavcan::Subscriber<ardupilot::gnss::Heading, HeadingCb> *gnss_heading;
+    gnss_heading = new uavcan::Subscriber<ardupilot::gnss::Heading, HeadingCb>(*node);
+    const int gnss_heading_start_res = gnss_heading->start(HeadingCb(ap_uavcan, &handle_heading_msg_trampoline));
+    if (gnss_heading_start_res < 0) {
+        AP_HAL::panic("UAVCAN GNSS subscriber start problem\n\r");
+        return;
+    }
 }
 
 AP_GPS_Backend* AP_GPS_UAVCAN::probe(AP_GPS &_gps, AP_GPS::GPS_State &_state)
@@ -93,16 +103,16 @@ AP_GPS_Backend* AP_GPS_UAVCAN::probe(AP_GPS &_gps, AP_GPS::GPS_State &_state)
         if (_detected_modules[i].driver == nullptr && _detected_modules[i].ap_uavcan != nullptr) {
             backend = new AP_GPS_UAVCAN(_gps, _state);
             if (backend == nullptr) {
-                debug_gps_uavcan(2,
-                                 _detected_modules[i].ap_uavcan->get_driver_index(),
+                AP::can().log_text(AP_CANManager::LOG_ERROR,
+                                 LOG_TAG,
                                  "Failed to register UAVCAN GPS Node %d on Bus %d\n",
                                  _detected_modules[i].node_id,
                                  _detected_modules[i].ap_uavcan->get_driver_index());
             } else {
                 _detected_modules[i].driver = backend;
                 backend->_detected_module = i;
-                debug_gps_uavcan(2,
-                                 _detected_modules[i].ap_uavcan->get_driver_index(),
+                AP::can().log_text(AP_CANManager::LOG_INFO,
+                                 LOG_TAG,
                                  "Registered UAVCAN GPS Node %d on Bus %d\n",
                                  _detected_modules[i].node_id,
                                  _detected_modules[i].ap_uavcan->get_driver_index());
@@ -390,6 +400,21 @@ void AP_GPS_UAVCAN::handle_aux_msg(const AuxCb &cb)
     }
 }
 
+void AP_GPS_UAVCAN::handle_heading_msg(const HeadingCb &cb)
+{
+    WITH_SEMAPHORE(sem);
+
+    if (interim_state.gps_yaw_configured == false) {
+        interim_state.gps_yaw_configured = cb.msg->heading_valid;
+    }
+
+    interim_state.have_gps_yaw = cb.msg->heading_valid;
+    interim_state.gps_yaw = degrees(cb.msg->heading_rad);
+
+    interim_state.have_gps_yaw_accuracy = cb.msg->heading_accuracy_valid;
+    interim_state.gps_yaw_accuracy = degrees(cb.msg->heading_accuracy_rad);
+}
+
 void AP_GPS_UAVCAN::handle_fix_msg_trampoline(AP_UAVCAN* ap_uavcan, uint8_t node_id, const FixCb &cb)
 {
     WITH_SEMAPHORE(_sem_registry);
@@ -420,12 +445,28 @@ void AP_GPS_UAVCAN::handle_aux_msg_trampoline(AP_UAVCAN* ap_uavcan, uint8_t node
     }
 }
 
+void AP_GPS_UAVCAN::handle_heading_msg_trampoline(AP_UAVCAN* ap_uavcan, uint8_t node_id, const HeadingCb &cb)
+{
+    WITH_SEMAPHORE(_sem_registry);
+
+    AP_GPS_UAVCAN* driver = get_uavcan_backend(ap_uavcan, node_id);
+    if (driver != nullptr) {
+        driver->handle_heading_msg(cb);
+    }
+}
+
 // Consume new data and mark it received
 bool AP_GPS_UAVCAN::read(void)
 {
     WITH_SEMAPHORE(sem);
     if (_new_data) {
         _new_data = false;
+
+        // the encoding of accuracies in UAVCAN can result in infinite
+        // values. These cause problems with blending. Use 1000m and 1000m/s instead
+        interim_state.horizontal_accuracy = MIN(interim_state.horizontal_accuracy, 1000.0);
+        interim_state.vertical_accuracy = MIN(interim_state.vertical_accuracy, 1000.0);
+        interim_state.speed_accuracy = MIN(interim_state.speed_accuracy, 1000.0);
 
         state = interim_state;
 
@@ -452,4 +493,4 @@ void AP_GPS_UAVCAN::inject_data(const uint8_t *data, uint16_t len)
     }
 }
 
-#endif // HAL_WITH_UAVCAN
+#endif // HAL_ENABLE_LIBUAVCAN_DRIVERS

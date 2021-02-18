@@ -387,7 +387,7 @@ bool ModeAuto::start_command(const AP_Mission::Mission_Command& cmd)
         do_set_home(cmd);
         break;
 
-#if MOUNT == ENABLED
+#if HAL_MOUNT_ENABLED
     // Sets the region of interest (ROI) for a sensor set or the
     // vehicle itself. This can then be used by the vehicles control
     // system to control the vehicle attitude and the attitude of various
@@ -446,6 +446,10 @@ void ModeAuto::exit_mission()
     }
 
     if (g2.mis_done_behave == MIS_DONE_BEHAVE_ACRO && rover.set_mode(rover.mode_acro, ModeReason::MISSION_END)) {
+        return;
+    }
+
+    if (g2.mis_done_behave == MIS_DONE_BEHAVE_MANUAL && rover.set_mode(rover.mode_manual, ModeReason::MISSION_END)) {
         return;
     }
 
@@ -664,7 +668,7 @@ bool ModeAuto::verify_nav_delay(const AP_Mission::Mission_Command& cmd)
     return false;
 }
 
-bool ModeAuto::verify_RTL()
+bool ModeAuto::verify_RTL() const
 {
     return reached_destination();
 }

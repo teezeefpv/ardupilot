@@ -69,8 +69,8 @@ void Copter::Log_Write_Attitude()
 {
     Vector3f targets = attitude_control->get_att_target_euler_cd();
     targets.z = wrap_360_cd(targets.z);
-    logger.Write_Attitude(targets);
-    logger.Write_Rate(ahrs_view, *motors, *attitude_control, *pos_control);
+    ahrs.Write_Attitude(targets);
+    ahrs_view->Write_Rate(*motors, *attitude_control, *pos_control);
     if (should_log(MASK_LOG_PID)) {
         logger.Write_PID(LOG_PIDR_MSG, attitude_control->get_rate_roll_pid().get_pid_info());
         logger.Write_PID(LOG_PIDP_MSG, attitude_control->get_rate_pitch_pid().get_pid_info());
@@ -83,11 +83,11 @@ void Copter::Log_Write_Attitude()
 void Copter::Log_Write_EKF_POS()
 {
     AP::ahrs_navekf().Log_Write();
-    logger.Write_AHRS2();
+    ahrs.Write_AHRS2();
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     sitl.Log_Write_SIMSTATE();
 #endif
-    logger.Write_POS();
+    ahrs.Write_POS();
 }
 
 struct PACKED log_MotBatt {
@@ -488,6 +488,12 @@ const struct LogStructure Copter::log_structure[] = {
 // @Field: Id: Data type identifier
 // @Field: Value: Value
 
+// @LoggerMessage: DU16
+// @Description: Generic 16-bit-unsigned-integer storage
+// @Field: TimeUS: Time since system startup
+// @Field: Id: Data type identifier
+// @Field: Value: Value
+
 // @LoggerMessage: D32
 // @Description: Generic 32-bit-signed-integer storage
 // @Field: TimeUS: Time since system startup
@@ -551,15 +557,15 @@ const struct LogStructure Copter::log_structure[] = {
 // @Field: pY: Target position relative to vehicle, Y-Axis (0 if target not found)
 // @Field: vX: Target velocity relative to vehicle, X-Axis (0 if target not found)
 // @Field: vY: Target velocity relative to vehicle, Y-Axis (0 if target not found)
-// @Field: mX: Target's relative to origin postion as 3-D Vector, X-Axis
-// @Field: mY: Target's relative to origin postion as 3-D Vector, Y-Axis
-// @Field: mZ: Target's relative to origin postion as 3-D Vector, Z-Axis
-// @Field: LastMeasUS: Time when target was last detected
+// @Field: mX: Target's relative to origin position as 3-D Vector, X-Axis
+// @Field: mY: Target's relative to origin position as 3-D Vector, Y-Axis
+// @Field: mZ: Target's relative to origin position as 3-D Vector, Z-Axis
+// @Field: LastMeasMS: Time when target was last detected
 // @Field: EKFOutl: EKF's outlier count
 // @Field: Est: Type of estimator used
 #if PRECISION_LANDING == ENABLED
     { LOG_PRECLAND_MSG, sizeof(log_Precland),
-      "PL",    "QBBfffffffIIB",    "TimeUS,Heal,TAcq,pX,pY,vX,vY,mX,mY,mZ,LastMeasUS,EKFOutl,Est", "s--ddmmddms--","F--00BB00BC--" },
+      "PL",    "QBBfffffffIIB",    "TimeUS,Heal,TAcq,pX,pY,vX,vY,mX,mY,mZ,LastMeasMS,EKFOutl,Est", "s--mmnnmmms--","F--BBBBBBBC--" },
 #endif
 
 // @LoggerMessage: SIDD
@@ -611,7 +617,7 @@ const struct LogStructure Copter::log_structure[] = {
 void Copter::Log_Write_Vehicle_Startup_Messages()
 {
     // only 200(?) bytes are guaranteed by AP_Logger
-    logger.Write_MessageF("Frame: %s", get_frame_string());
+    logger.Write_MessageF("Frame: %s/%s", motors->get_frame_string(), motors->get_type_string());
     logger.Write_Mode((uint8_t)control_mode, control_mode_reason);
     ahrs.Log_Write_Home_And_Origin();
     gps.Write_AP_Logger_Log_Startup_messages();

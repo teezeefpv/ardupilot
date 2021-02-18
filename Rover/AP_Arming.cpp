@@ -19,11 +19,11 @@ bool AP_Arming_Rover::rc_calibration_checks(const bool display_failure)
         const RC_Channel *channel = channels[i];
         const char *channel_name = channel_names[i];
         // check if radio has been calibrated
-        if (channel->get_radio_min() > 1300) {
+        if (channel->get_radio_min() > RC_Channel::RC_CALIB_MIN_LIMIT_PWM) {
             check_failed(ARMING_CHECK_RC, display_failure, "%s radio min too high", channel_name);
             return false;
         }
-        if (channel->get_radio_max() < 1700) {
+        if (channel->get_radio_max() < RC_Channel::RC_CALIB_MAX_LIMIT_PWM) {
             check_failed(ARMING_CHECK_RC, display_failure, "%s radio max too low", channel_name);
             return false;
         }
@@ -42,12 +42,9 @@ bool AP_Arming_Rover::gps_checks(bool display_failure)
     const AP_AHRS &ahrs = AP::ahrs();
 
     // always check if inertial nav has started and is ready
-    if (!ahrs.prearm_healthy()) {
-        const char *reason = ahrs.prearm_failure_reason();
-        if (reason == nullptr) {
-            reason = "AHRS not healthy";
-        }
-        check_failed(display_failure, "%s", reason);
+    char failure_msg[50] = {};
+    if (!ahrs.pre_arm_check(true, failure_msg, sizeof(failure_msg))) {
+        check_failed(display_failure, "AHRS: %s", failure_msg);
         return false;
     }
 
@@ -59,11 +56,8 @@ bool AP_Arming_Rover::gps_checks(bool display_failure)
 
     // ensure position esetimate is ok
     if (!rover.ekf_position_ok()) {
-        const char *reason = ahrs.prearm_failure_reason();
-        if (reason == nullptr) {
-            reason = "Need Position Estimate";
-        }
-        check_failed(display_failure, "%s", reason);
+        // vehicle level position estimate checks
+        check_failed(display_failure, "Need Position Estimate");
         return false;
     }
 
@@ -79,6 +73,11 @@ bool AP_Arming_Rover::pre_arm_checks(bool report)
     }
     if (SRV_Channels::get_emergency_stop()) {
         check_failed(report, "Motors Emergency Stopped");
+        return false;
+    }
+
+    if (rover.g2.sailboat.sail_enabled() && !rover.g2.windvane.enabled()) {
+        check_failed(report, "Sailing enabled with no WindVane");
         return false;
     }
 
@@ -135,9 +134,9 @@ bool AP_Arming_Rover::arm(AP_Arming::Method method, const bool do_arming_checks)
 /*
   disarm motors
  */
-bool AP_Arming_Rover::disarm(const AP_Arming::Method method)
+bool AP_Arming_Rover::disarm(const AP_Arming::Method method, bool do_disarm_checks)
 {
-    if (!AP_Arming::disarm(method)) {
+    if (!AP_Arming::disarm(method, do_disarm_checks)) {
         return false;
     }
     if (rover.control_mode != &rover.mode_auto) {

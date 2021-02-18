@@ -62,7 +62,7 @@
 
 // don't shift index 0 to index 63. Use this when you know there will be
 // no conflict with the parent
-#define AP_PARAM_NO_SHIFT           (1<<3)
+#define AP_PARAM_FLAG_NO_SHIFT      (1<<3)
 
 // the var_info is a pointer, allowing for dynamic definition of the var_info tree
 #define AP_PARAM_FLAG_INFO_POINTER  (1<<4)
@@ -210,8 +210,9 @@ public:
     // a token used for first()/next() state
     typedef struct {
         uint32_t key : 9;
-        uint32_t idx : 5; // offset into array types
+        uint32_t idx : 4; // offset into array types
         uint32_t group_element : 18;
+        uint32_t last_disabled : 1;
     } ParamToken;
 
 
@@ -292,7 +293,7 @@ public:
     /// gat a value by name, used by scripting
     ///
     /// @param  name            The full name of the variable to be found.
-    /// @param  value           A refernce to the variable
+    /// @param  value           A reference to the variable
     /// @return                 true if the variable is found
     static bool get(const char *name, float &value);
 
@@ -313,6 +314,9 @@ public:
     ///                         it does not exist.
     ///
     static AP_Param * find_by_index(uint16_t idx, enum ap_var_type *ptype, ParamToken *token);
+
+    // by-name equivalent of find_by_index()
+    static AP_Param* find_by_name(const char* name, enum ap_var_type *ptype, ParamToken *token);
 
     /// Find a variable by pointer
     ///
@@ -448,7 +452,7 @@ public:
 
     /// Returns the next variable in _var_info, recursing into groups
     /// as needed
-    static AP_Param *      next(ParamToken *token, enum ap_var_type *ptype);
+    static AP_Param *      next(ParamToken *token, enum ap_var_type *ptype, bool skip_disabled=false);
 
     /// Returns the next scalar variable in _var_info, recursing into groups
     /// as needed
@@ -474,6 +478,9 @@ public:
 
     // return true if the parameter is read-only
     bool is_read_only(void) const;
+
+    // return the persistent top level key for the ParamToken key
+    static uint16_t get_persistent_key(uint16_t key) { return _var_info[key].key; }
     
     // count of parameters in tree
     static uint16_t count_parameters(void);
@@ -639,14 +646,15 @@ private:
                                     uint16_t ofs,
                                     uint8_t size);
     static AP_Param *           next_group(
-                                    uint16_t vindex, 
+                                    const uint16_t vindex,
                                     const struct GroupInfo *group_info,
                                     bool *found_current,
-                                    uint32_t group_base,
-                                    uint8_t group_shift,
-                                    ptrdiff_t group_offset,
+                                    const uint32_t group_base,
+                                    const uint8_t group_shift,
+                                    const ptrdiff_t group_offset,
                                     ParamToken *token,
-                                    enum ap_var_type *ptype);
+                                    enum ap_var_type *ptype,
+                                    bool skip_disabled);
 
     // find a default value given a pointer to a default value in flash
     static float get_default_value(const AP_Param *object_ptr, const float *def_value_ptr);
@@ -672,6 +680,7 @@ private:
     void send_parameter(const char *name, enum ap_var_type param_header_type, uint8_t idx) const;
 
     static StorageAccess        _storage;
+    static StorageAccess        _storage_bak;
     static uint16_t             _num_vars;
     static uint16_t             _parameter_count;
     static uint16_t             _count_marker;
@@ -887,6 +896,23 @@ public:
         save(force);
     }
 
+    /// Combined set and save, but only does the save if the value is
+    /// different from the current ram value, thus saving us a
+    /// scan(). This should only be used where we have not set() the
+    /// value separately, as otherwise the value in EEPROM won't be
+    /// updated correctly.
+    void set_and_save_ifchanged(const T &v) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+        if (_value == v) {
+#pragma GCC diagnostic pop
+            return;
+        }
+        set(v);
+        save(true);
+    }
+
+
     /// Conversion to T returns a reference to the value.
     ///
     /// This allows the class to be used in many situations where the value would be legal.
@@ -980,3 +1006,15 @@ AP_PARAMDEF(int32_t, Int32, AP_PARAM_INT32);  // defines AP_Int32
 // _suffix is the suffix on the AP_* type name
 // _pt is the enum ap_var_type type
 #define AP_PARAMDEFV(_t, _suffix, _pt)   typedef AP_ParamV<_t, _pt> AP_ ## _suffix;
+
+/*
+  template class for enum types based on AP_Int8
+ */
+template<typename eclass>
+class AP_Enum : public AP_Int8
+{
+public:
+    operator const eclass () const {
+        return (eclass)_value;
+    }
+};

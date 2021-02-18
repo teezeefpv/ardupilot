@@ -110,6 +110,9 @@ public:
     /// center is offsets in cm from EKF origin in NE frame, radius is in meters
     bool get_inclusion_circle(uint8_t index, Vector2f &center_pos_cm, float &radius) const;
 
+    // false if margin < fence radius 
+    bool check_inclusion_circle_margin(float margin) const;
+
     ///
     /// mavlink
     ///
@@ -321,7 +324,7 @@ private:
     // their fences when upgrading)
     bool convert_to_new_storage() WARN_IF_UNUSED;
     // load boundary point from eeprom, returns true on successful load
-    bool load_point_from_eeprom(uint16_t i, Vector2l& point) WARN_IF_UNUSED;
+    bool load_point_from_eeprom(uint16_t i, Vector2l& point) const WARN_IF_UNUSED;
 
 
 #if AC_POLYFENCE_FENCE_POINT_PROTOCOL_SUPPORT

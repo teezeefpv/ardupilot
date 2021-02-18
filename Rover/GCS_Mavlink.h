@@ -18,6 +18,7 @@ protected:
     MAV_RESULT _handle_command_preflight_calibration(const mavlink_command_long_t &packet) override;
     MAV_RESULT handle_command_int_packet(const mavlink_command_int_t &packet) override;
     MAV_RESULT handle_command_long_packet(const mavlink_command_long_t &packet) override;
+    MAV_RESULT handle_command_int_do_reposition(const mavlink_command_int_t &packet);
 
     void send_position_target_global_int() override;
 
@@ -39,6 +40,14 @@ private:
     void handle_change_alt_request(AP_Mission::Mission_Command &cmd) override;
     void handle_rc_channels_override(const mavlink_message_t &msg) override;
     bool try_send_message(enum ap_message id) override;
+
+    void handle_manual_control(const mavlink_message_t &msg);
+    void handle_heartbeat(const mavlink_message_t &msg);
+    void handle_set_attitude_target(const mavlink_message_t &msg);
+    void handle_set_position_target_local_ned(const mavlink_message_t &msg);
+    void handle_set_position_target_global_int(const mavlink_message_t &msg);
+    void handle_hil_state(const mavlink_message_t &msg);
+    void handle_radio(const mavlink_message_t &msg);
 
     void packetReceived(const mavlink_status_t &status, const mavlink_message_t &msg) override;
 

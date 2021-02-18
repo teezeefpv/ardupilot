@@ -22,16 +22,25 @@ public:
                 bool runEKF,          // set to true when flying or movement suitable for yaw estimation
                 float TAS);           // true airspeed used for centripetal accel compensation - set to 0 when not required.
 
-    void pushVelData(Vector2f vel,    // NE velocity measurement (m/s)
-                     float velAcc);   // 1-sigma accuracy of velocity measurement (m/s)
+    // Fuse NE velocty mesurements and update the EKF's and GSF state and covariance estimates
+    // Should be called after update(...) whenever new velocity data is available
+    void fuseVelData(const Vector2f &vel,    // NE velocity measurement (m/s)
+                     const float velAcc);   // 1-sigma accuracy of velocity measurement (m/s)
+
+    // set the gyro bias in rad/sec
+    void setGyroBias(Vector3f &gyroBias);
 
     // get solution data for logging
     // return false if yaw estimation is inactive
-    bool getLogData(float &yaw_composite, float &yaw_composite_variance, float yaw[N_MODELS_EKFGSF], float innov_VN[N_MODELS_EKFGSF], float innov_VE[N_MODELS_EKFGSF], float weight[N_MODELS_EKFGSF]);
+    bool getLogData(float &yaw_composite, float &yaw_composite_variance, float yaw[N_MODELS_EKFGSF], float innov_VN[N_MODELS_EKFGSF], float innov_VE[N_MODELS_EKFGSF], float weight[N_MODELS_EKFGSF]) const;
 
     // get yaw estimated and corresponding variance
     // return false if yaw estimation is inactive
-    bool getYawData(float &yaw, float &yawVariance);
+    bool getYawData(float &yaw, float &yawVariance) const;
+
+    // get the length of the weighted average velocity innovation vector
+    // return false if not available
+    bool getVelInnovLength(float &velInnovLength) const;
 
 private:
 
@@ -75,14 +84,13 @@ private:
     float accel_gain;               // gain from accel vector tilt error to rate gyro correction used by AHRS calculation
     Vector3f ahrs_accel;            // filtered body frame specific force vector used by AHRS calculation (m/s/s)
     float ahrs_accel_norm;          // length of body frame specific force vector used by AHRS calculation (m/s/s)
-    bool ahrs_turn_comp_enabled;    // true when compensation for centripetal acceleration in coordinated turns using true airspeed is being used.
     float true_airspeed;            // true airspeed used to correct for centripetal acceleratoin in coordinated turns (m/s)
 
     // Runs quaternion prediction for the selected AHRS using IMU (and optionally true airspeed) data
     void predictAHRS(const uint8_t mdl_idx);
 
     // Applies a body frame delta angle to a body to earth frame rotation matrix using a small angle approximation
-    Matrix3f updateRotMat(const Matrix3f &R, const Vector3f &g);
+    Matrix3f updateRotMat(const Matrix3f &R, const Vector3f &g) const;
 
     // Initialises the tilt (roll and pitch) for all AHRS using IMU acceleration data
     void alignTilt();
@@ -100,20 +108,17 @@ private:
     };
     EKF_struct EKF[N_MODELS_EKFGSF];
     bool vel_fuse_running;  // true when the bank of EKF's has started fusing GPS velocity data
-    bool vel_data_updated;  // true when velocity data has been updated
     bool run_ekf_gsf;       // true when operating condition is suitable for to run the GSF and EKF models and fuse velocity data
-    Vector2f vel_NE;        // NE velocity observations (m/s)
-    float vel_accuracy;     // 1-sigma accuracy of velocity observations (m/s)
 
-    // Initialises the EKF's and GSF states, but not the AHRS complementary filters
-    void initialise();
+    // Resets states and covariances for the EKF's and GSF including GSF weights, but not the AHRS complementary filters
+    void resetEKFGSF();
 
     // Runs the state and covariance prediction for the selected EKF
     void predict(const uint8_t mdl_idx);
 
     // Runs the state and covariance update for the selected EKF using the GPS NE velocity measurement
     // Returns false if the sttae and covariance correction failed
-    bool correct(const uint8_t mdl_idx);
+    bool correct(const uint8_t mdl_idx, const Vector2f &vel, const float velObsVar);
 
     // Forces symmetry on the covariance matrix for the selected EKF
     void forceSymmetry(const uint8_t mdl_idx);

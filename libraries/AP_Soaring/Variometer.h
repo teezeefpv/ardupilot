@@ -21,14 +21,9 @@ class Variometer {
     // store time of last update
     uint64_t _prev_update_time;
 
-    float _last_alt;
-
     float _aspd_filt;
     float _aspd_filt_constrained;
 
-    float _last_aspd;
-    float _last_roll;
-    float _last_total_E;
     float _expected_thermalling_sink;
 
     // declares a 5point average filter using floats
@@ -52,13 +47,13 @@ public:
     float tau;
 
     void update(const float polar_K, const float polar_CD0, const float polar_B);
-    float calculate_aircraft_sinkrate(float phi, const float polar_K, const float polar_CD0, const float polar_B);
+    float calculate_aircraft_sinkrate(float phi, const float polar_K, const float polar_CD0, const float polar_B) const;
 
     void reset_filter(float value) { _climb_filter.reset(value);}
 
-    float get_airspeed(void) {return _aspd_filt;};
+    float get_airspeed(void) const {return _aspd_filt;};
 
-    float get_exp_thermalling_sink(void) {return _expected_thermalling_sink;};
+    float get_exp_thermalling_sink(void) const {return _expected_thermalling_sink;};
 
     float calculate_circling_time_constant();
 };

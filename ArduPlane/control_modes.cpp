@@ -41,8 +41,11 @@ Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
         ret = &mode_loiter;
         break;
     case Mode::Number::AVOID_ADSB:
+#if HAL_ADSB_ENABLED
         ret = &mode_avoidADSB;
         break;
+#endif
+    // if ADSB is not compiled in then fallthrough to guided
     case Mode::Number::GUIDED:
         ret = &mode_guided;
         break;
@@ -72,6 +75,11 @@ Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
         break;
     case Mode::Number::TAKEOFF:
         ret = &mode_takeoff;
+        break;
+    case Mode::Number::THERMAL:
+#if HAL_SOARING_ENABLED
+        ret = &mode_thermal;
+#endif
         break;
     }
     return ret;
@@ -131,14 +139,14 @@ void Plane::read_control_switch()
 
 #if PARACHUTE == ENABLED
     if (g.parachute_channel > 0) {
-        if (RC_Channels::get_radio_in(g.parachute_channel-1) >= 1700) {
+        if (RC_Channels::get_radio_in(g.parachute_channel-1) >= RC_Channel::AUX_PWM_TRIGGER_HIGH) {
             parachute_manual_release();
         }
     }
 #endif
 }
 
-uint8_t Plane::readSwitch(void)
+uint8_t Plane::readSwitch(void) const
 {
     uint16_t pulsewidth = RC_Channels::get_radio_in(g.flight_mode_channel - 1);
     if (pulsewidth <= 900 || pulsewidth >= 2200) return 255;            // This is an error condition
