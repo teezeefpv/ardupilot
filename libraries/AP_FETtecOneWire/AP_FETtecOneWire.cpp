@@ -291,7 +291,7 @@ void AP_FETtecOneWire::Init()
     @param crc_seed CRC where it gets added too
     @return 8 bit CRC
 */
-uint8_t AP_FETtecOneWire::UpdateCrc8(uint8_t crc, uint8_t crc_seed)
+uint8_t AP_FETtecOneWire::Update_crc8(uint8_t crc, uint8_t crc_seed)
 {
     uint8_t crc_u, i;
     crc_u = crc;
@@ -308,11 +308,11 @@ uint8_t AP_FETtecOneWire::UpdateCrc8(uint8_t crc, uint8_t crc_seed)
     @param BufLen count of bytes that should be used for CRC calculation
     @return 8 bit CRC
 */
-uint8_t AP_FETtecOneWire::GetCrc8(uint8_t* Buf, uint16_t BufLen)
+uint8_t AP_FETtecOneWire::Get_crc8(uint8_t* Buf, uint16_t BufLen)
 {
     uint8_t crc = 0;
     for (uint16_t i = 0; i < BufLen; i++) {
-        crc = UpdateCrc8(Buf[i], crc);
+        crc = Update_crc8(Buf[i], crc);
     }
     return (crc);
 }
@@ -339,7 +339,7 @@ void AP_FETtecOneWire::Transmit(uint8_t ESC_id, uint8_t* Bytes, uint8_t Length)
     for (uint8_t i = 0; i < Length; i++) {
         transmitArr[i + 5] = Bytes[i];
     }
-    transmitArr[Length + 5] = GetCrc8(transmitArr, Length + 5); // crc
+    transmitArr[Length + 5] = Get_crc8(transmitArr, Length + 5); // crc
     _uart->write(transmitArr, Length + 6);
     _IgnoreOwnBytes += Length + 6;
 }
@@ -384,7 +384,7 @@ uint8_t AP_FETtecOneWire::Receive(uint8_t* Bytes, uint8_t Length, uint8_t return
                 ReceiveBuf[i] = _uart->read();
             }
             // check CRC
-            if (GetCrc8(ReceiveBuf, Length + 5) == ReceiveBuf[Length + 5]) {
+            if (Get_crc8(ReceiveBuf, Length + 5) == ReceiveBuf[Length + 5]) {
                 if (!returnFullFrame) {
                     for (uint8_t i = 0; i < Length; i++) {
                         Bytes[i] = ReceiveBuf[5 + i];
@@ -803,7 +803,7 @@ int8_t AP_FETtecOneWire::ESCsSetValues(uint16_t* motorValues, uint16_t* Telemetr
             }
 
             // send throttle signal
-            OneWireFastThrottleCommand[_FastThrottleByteCount - 1] = GetCrc8(
+            OneWireFastThrottleCommand[_FastThrottleByteCount - 1] = Get_crc8(
                     OneWireFastThrottleCommand, _FastThrottleByteCount - 1);
             _uart->write(OneWireFastThrottleCommand, _FastThrottleByteCount);
             // last byte of signal can be used to make sure the first TLM byte is correct, in case of spike corruption

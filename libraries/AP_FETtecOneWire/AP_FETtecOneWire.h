@@ -153,8 +153,6 @@ private:
 */
     int8_t ESCsSetValues(uint16_t *motorValues, uint16_t *Telemetry, uint8_t motorCount, uint8_t tlmRequest);
 
-    uint8_t UpdateCrc8(uint8_t crc, uint8_t crc_seed);  //TODO remove
-    uint8_t GetCrc8(uint8_t* Buf, uint16_t BufLen);
     static constexpr uint8_t ALL_ID = 0x1F;
     typedef struct FETtecOneWireESC
     {
